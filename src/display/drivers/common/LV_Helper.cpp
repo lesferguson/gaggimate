@@ -8,6 +8,7 @@
  *
  */
 #include "LV_Helper.h"
+#include <display/core/Log.h>
 
 #if LV_VERSION_CHECK(9, 0, 0)
 #error "Currently not supported 9.x"
@@ -83,8 +84,7 @@ static void touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data) {
 
 #if LV_USE_LOG
 void lv_log_print_g_cb(const char *buf) {
-    Serial.println(buf);
-    Serial.flush();
+    Logger.info(LOG_DRIVER, "%s", buf);
 }
 #endif
 

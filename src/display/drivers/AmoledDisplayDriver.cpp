@@ -1,6 +1,7 @@
 #include "AmoledDisplayDriver.h"
 #include "AmoledDisplay/pin_config.h"
 #include <Wire.h>
+#include <display/core/Log.h>
 #include <display/drivers/common/LV_Helper.h>
 
 AmoledDisplayDriver *AmoledDisplayDriver::instance = nullptr;
@@ -10,9 +11,9 @@ static bool detectI2CDevice(uint8_t address, const char *deviceName = nullptr) {
         Wire.beginTransmission(address);
         if (Wire.endTransmission() == 0) {
             if (deviceName) {
-                ESP_LOGI("AmoledDisplayDriver", "Found %s at 0x%02X\n", deviceName, address);
+                Logger.info(LOG_DRIVER, "Found %s at 0x%02X", deviceName, address);
             } else {
-                ESP_LOGI("AmoledDisplayDriver", "Found device at 0x%02X\n", address);
+                Logger.info(LOG_DRIVER, "Found device at 0x%02X", address);
             }
             return true;
         }
@@ -22,12 +23,12 @@ static bool detectI2CDevice(uint8_t address, const char *deviceName = nullptr) {
 }
 
 bool AmoledDisplayDriver::isCompatible() {
-    ESP_LOGI("AmoledDisplayDriver", "Testing LilyGo T-Display...");
+    Logger.info(LOG_DRIVER, "Testing LilyGo T-Display...");
     if (testHw(LILYGO_T_DISPLAY_S3_DS_HW_CONFIG)) {
         hwConfig = LILYGO_T_DISPLAY_S3_DS_HW_CONFIG;
         return true;
     }
-    ESP_LOGI("AmoledDisplayDriver", "Testing Waveshare AMOLED Display...");
+    Logger.info(LOG_DRIVER, "Testing Waveshare AMOLED Display...");
     if (testHw(WAVESHARE_S3_AMOLED_HW_CONFIG)) {
         hwConfig = WAVESHARE_S3_AMOLED_HW_CONFIG;
         return true;
@@ -37,11 +38,11 @@ bool AmoledDisplayDriver::isCompatible() {
 
 void AmoledDisplayDriver::init() {
     panel = new Amoled_DisplayPanel(hwConfig);
-    ESP_LOGI("AmoledDisplayDriver", "Initializing LilyGo T-Display...");
+    Logger.info(LOG_DRIVER, "Initializing LilyGo T-Display...");
 
     if (!panel->begin()) {
         for (uint8_t i = 0; i < 20; i++) {
-            ESP_LOGE("AmoledDisplayDriver", "Error, failed to initialize T-Display");
+            Logger.error(LOG_DRIVER, "Error, failed to initialize T-Display");
             delay(1000);
         }
         ESP.restart();

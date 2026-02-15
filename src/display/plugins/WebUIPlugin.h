@@ -9,6 +9,7 @@
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
 #include <display/core/Plugin.h>
+#include <set>
 
 constexpr size_t UPDATE_CHECK_INTERVAL = 5 * 60 * 1000;
 constexpr size_t CLEANUP_PERIOD = 5 * 1000;
@@ -53,6 +54,9 @@ class WebUIPlugin : public Plugin {
     // Core dump download
     void handleCoreDumpDownload(AsyncWebServerRequest *request);
 
+    // Log streaming
+    void broadcastLogTail();
+
     GitHubOTA *ota = nullptr;
     AsyncWebServer server;
     AsyncWebSocket ws;
@@ -70,6 +74,10 @@ class WebUIPlugin : public Plugin {
     bool serverRunning = false;
     String updateComponent = "";
     float currentBluetoothWeight = 0.0f;
+
+    // Log streaming state
+    std::set<uint32_t> logSubscribers;
+    unsigned long lastLogTail = 0;
 };
 
 #endif // WEBUIPLUGIN_H

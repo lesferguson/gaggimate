@@ -4,6 +4,7 @@
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "utilities.h"
+#include <display/core/Log.h>
 #include <display/drivers/common/RGBPanelInit.h>
 #include <esp_adc_cal.h>
 
@@ -57,7 +58,7 @@ bool WavesharePanel::begin(WS_RGBPanel_Color_Order order) {
     Set_EXIO(EXIO_PIN8, Low);
 
     if (!initTouch()) {
-        Serial.println(F("Touch chip not found."));
+        Logger.error(LOG_DRIVER, "Touch chip not found.");
         return false;
     }
 
@@ -86,17 +87,16 @@ bool WavesharePanel::installSD() {
     if (SD_MMC.begin("/sdcard", true, false)) {
         uint8_t cardType = SD_MMC.cardType();
         if (cardType != CARD_NONE) {
-            Serial.print(F("SD Card Type: "));
             if (cardType == CARD_MMC)
-                Serial.println(F("MMC"));
+                Logger.info(LOG_DRIVER, "SD Card Type: MMC");
             else if (cardType == CARD_SD)
-                Serial.println(F("SDSC"));
+                Logger.info(LOG_DRIVER, "SD Card Type: SDSC");
             else if (cardType == CARD_SDHC)
-                Serial.println(F("SDHC"));
+                Logger.info(LOG_DRIVER, "SD Card Type: SDHC");
             else
-                Serial.println(F("UNKNOWN"));
+                Logger.info(LOG_DRIVER, "SD Card Type: UNKNOWN");
             uint64_t cardSize = SD_MMC.cardSize() / (1024 * 1024);
-            Serial.printf("SD Card Size: %lluMB\n", cardSize);
+            Logger.info(LOG_DRIVER, "SD Card Size: %lluMB", cardSize);
         }
         return true;
     }
@@ -886,14 +886,14 @@ bool WavesharePanel::initTouch() {
     delay(100);
     TouchDrvDigitalWrite(0, High);
 
-    log_i("=================initTouch====================");
+    Logger.info(LOG_DRIVER, "=================initTouch====================");
     _touchDrv = new TouchDrvCSTXXX();
     _touchDrv->setGpioCallback(TouchDrvPinMode, TouchDrvDigitalWrite, TouchDrvDigitalRead);
     _touchDrv->setPins(0x00, touch_irq_pin);
     result = _touchDrv->begin(Wire, CST816_SLAVE_ADDRESS, WS_BOARD_I2C_SDA, WS_BOARD_I2C_SCL);
     if (result) {
         const char *model = _touchDrv->getModelName();
-        log_i("Successfully initialized %s, using %s Driver!\n", model, model);
+        Logger.info(LOG_DRIVER, "Successfully initialized %s, using %s Driver!", model, model);
         return true;
     }
     delete _touchDrv;
@@ -906,12 +906,12 @@ bool WavesharePanel::initTouch() {
         TouchDrvGT911 *tmp = static_cast<TouchDrvGT911 *>(_touchDrv);
         tmp->setInterruptMode(FALLING);
 
-        log_i("Successfully initialized GT911, using GT911 Driver!");
+        Logger.info(LOG_DRIVER, "Successfully initialized GT911, using GT911 Driver!");
         return true;
     }
     delete _touchDrv;
 
-    log_e("Unable to find touch device.");
+    Logger.error(LOG_DRIVER, "Unable to find touch device.");
 
     _touchDrv = nullptr;
 

@@ -1,5 +1,6 @@
 #include "ProfileManager.h"
 #include <ArduinoJson.h>
+#include <display/core/Log.h>
 
 #include <utility>
 
@@ -154,7 +155,7 @@ bool ProfileManager::saveProfile(Profile &profile) {
         isNew = true;
     }
 
-    ESP_LOGI("ProfileManager", "Saving profile %s", profile.id.c_str());
+    Logger.info(LOG_PROFILE, "Saving profile %s", profile.id.c_str());
 
     File file = _fs->open(profilePath(profile.id), "w");
     if (!file)
@@ -186,7 +187,7 @@ bool ProfileManager::deleteProfile(const String &uuid) {
 bool ProfileManager::profileExists(const String &uuid) { return _fs->exists(profilePath(uuid)); }
 
 void ProfileManager::selectProfile(const String &uuid) {
-    ESP_LOGI("ProfileManager", "Selecting profile %s", uuid.c_str());
+    Logger.info(LOG_PROFILE, "Selecting profile %s", uuid.c_str());
     _settings.setSelectedProfile(uuid);
     selectedProfile = Profile{};
     loadSelectedProfile(selectedProfile);

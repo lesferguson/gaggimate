@@ -357,6 +357,58 @@ export function PluginCard({
           </div>
         )}
       </div>
+
+      <div className='bg-base-200 rounded-lg p-4'>
+        <div className='flex items-center justify-between'>
+          <span className='text-xl font-medium'>Remote Syslog</span>
+          <input
+            id='syslogEnabled'
+            name='syslogEnabled'
+            value='syslogEnabled'
+            type='checkbox'
+            className='toggle toggle-primary'
+            checked={!!formData.syslogEnabled}
+            onChange={onChange('syslogEnabled')}
+            aria-label='Enable Remote Syslog'
+          />
+        </div>
+        {formData.syslogEnabled && (
+          <div className='border-base-300 mt-4 space-y-4 border-t pt-4'>
+            <p className='text-sm opacity-70'>
+              Forward log messages to a remote syslog server (UDP). Requires restart after
+              changes.
+            </p>
+            <div className='form-control'>
+              <label htmlFor='syslogHost' className='mb-2 block text-sm font-medium'>
+                Syslog Server Host
+              </label>
+              <input
+                id='syslogHost'
+                name='syslogHost'
+                type='text'
+                className='input input-bordered w-full'
+                placeholder='192.168.1.100'
+                value={formData.syslogHost}
+                onChange={onChange('syslogHost')}
+              />
+            </div>
+            <div className='form-control'>
+              <label htmlFor='syslogPort' className='mb-2 block text-sm font-medium'>
+                Syslog Port
+              </label>
+              <input
+                id='syslogPort'
+                name='syslogPort'
+                type='number'
+                className='input input-bordered w-full'
+                placeholder='514'
+                value={formData.syslogPort}
+                onChange={onChange('syslogPort')}
+              />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

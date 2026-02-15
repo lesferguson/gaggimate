@@ -1,9 +1,10 @@
 #include "PluginManager.h"
+#include <display/core/Log.h>
 
 void PluginManager::registerPlugin(Plugin *plugin) { plugins.push_back(plugin); }
 
 void PluginManager::setup(Controller *controller) {
-    ESP_LOGV("PluginManager", "Setting up PluginManager");
+    Logger.verbose(LOG_PLUGIN_MGR, "Setting up PluginManager");
     on("system:dummy", [](const Event &) {
         // Register a dummy event so the event map is initialized properly
     });
@@ -22,7 +23,7 @@ void PluginManager::loop() {
 }
 
 void PluginManager::on(const String &eventId, const EventCallback &callback) {
-    ESP_LOGV("PluginManager", "Registering listener: %s", eventId.c_str());
+    Logger.verbose(LOG_PLUGIN_MGR, "Registering listener: %s", eventId.c_str());
     listeners[std::string(eventId.c_str())].push_back(callback);
 }
 
@@ -58,7 +59,7 @@ Event PluginManager::trigger(const String &eventId, const String &key, const flo
 }
 
 void PluginManager::trigger(Event &event) {
-    ESP_LOGV("PluginManager", "Triggering event: %s", event.id.c_str());
+    Logger.verbose(LOG_PLUGIN_MGR, "Triggering event: %s", event.id.c_str());
     if (listeners.count(std::string(event.id.c_str()))) {
         for (auto const &callback : listeners[std::string(event.id.c_str())]) {
             callback(event);

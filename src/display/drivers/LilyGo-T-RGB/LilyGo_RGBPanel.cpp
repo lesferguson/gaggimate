@@ -9,6 +9,7 @@
  */
 #include "LilyGo_RGBPanel.h"
 #include "utilities.h"
+#include <display/core/Log.h>
 #include <display/drivers/common/RGBPanelInit.h>
 #include <esp_adc_cal.h>
 
@@ -46,7 +47,7 @@ bool LilyGo_RGBPanel::begin(LilyGo_RGBPanel_Color_Order order) {
     initExtension();
 
     if (!initTouch()) {
-        Serial.println(F("Touch chip not found."));
+        Logger.error(LOG_DRIVER, "Touch chip not found.");
     }
 
     initBUS();
@@ -62,7 +63,7 @@ void LilyGo_RGBPanel::initExtension() {
     }
     // Initialize the XL9555 expansion chip
     if (!extension.init(Wire, BOARD_I2C_SDA, BOARD_I2C_SCL)) {
-        Serial.println(F("External GPIO expansion chip does not exist."));
+        Logger.error(LOG_DRIVER, "External GPIO expansion chip does not exist.");
         assert(false);
     }
 
@@ -85,17 +86,16 @@ bool LilyGo_RGBPanel::installSD() {
     if (SD_MMC.begin("/sdcard", true, false)) {
         uint8_t cardType = SD_MMC.cardType();
         if (cardType != CARD_NONE) {
-            Serial.print(F("SD Card Type: "));
             if (cardType == CARD_MMC)
-                Serial.println(F("MMC"));
+                Logger.info(LOG_DRIVER, "SD Card Type: MMC");
             else if (cardType == CARD_SD)
-                Serial.println(F("SDSC"));
+                Logger.info(LOG_DRIVER, "SD Card Type: SDSC");
             else if (cardType == CARD_SDHC)
-                Serial.println(F("SDHC"));
+                Logger.info(LOG_DRIVER, "SD Card Type: SDHC");
             else
-                Serial.println(F("UNKNOWN"));
+                Logger.info(LOG_DRIVER, "SD Card Type: UNKNOWN");
             uint64_t cardSize = SD_MMC.cardSize() / (1024 * 1024);
-            Serial.printf("SD Card Size: %lluMB\n", cardSize);
+            Logger.info(LOG_DRIVER, "SD Card Size: %lluMB", cardSize);
         }
         return true;
     }
@@ -437,7 +437,7 @@ bool LilyGo_RGBPanel::initTouch() {
     const uint8_t touch_irq_pin = BOARD_TOUCH_IRQ;
     bool result = false;
 
-    log_i("=================initTouch====================");
+    Logger.info(LOG_DRIVER, "=================initTouch====================");
     _touchDrv = new TouchDrvCSTXXX();
     _touchDrv->setGpioCallback(TouchDrvPinMode, TouchDrvDigitalWrite, TouchDrvDigitalRead);
     _touchDrv->setPins(touch_reset_pin, touch_irq_pin);
@@ -446,10 +446,8 @@ bool LilyGo_RGBPanel::initTouch() {
 
         _init_cmd = st7701_2_1_inches;
 
-#if ARDUHAL_LOG_LEVEL >= ARDUHAL_LOG_LEVEL_INFO
         const char *model = _touchDrv->getModelName();
-        log_i("Successfully initialized %s, using %s Driver!\n", model, model);
-#endif
+        Logger.info(LOG_DRIVER, "Successfully initialized %s, using %s Driver!", model, model);
         return true;
     }
     delete _touchDrv;
@@ -463,7 +461,7 @@ bool LilyGo_RGBPanel::initTouch() {
         tmp->setInterruptMode(FALLING);
 
         _init_cmd = st7701_2_8_inches;
-        log_i("Successfully initialized GT911, using GT911 Driver!");
+        Logger.info(LOG_DRIVER, "Successfully initialized GT911, using GT911 Driver!");
         return true;
     }
     delete _touchDrv;
@@ -479,16 +477,14 @@ bool LilyGo_RGBPanel::initTouch() {
         TouchDrvFT6X36 *tmp = static_cast<TouchDrvFT6X36 *>(_touchDrv);
         tmp->interruptTrigger();
 
-#if ARDUHAL_LOG_LEVEL >= ARDUHAL_LOG_LEVEL_INFO
         const char *model = _touchDrv->getModelName();
-        log_i("Successfully initialized %s, using %s Driver!\n", model, model);
-#endif
+        Logger.info(LOG_DRIVER, "Successfully initialized %s, using %s Driver!", model, model);
 
         return true;
     }
     delete _touchDrv;
 
-    log_e("Unable to find touch device.");
+    Logger.error(LOG_DRIVER, "Unable to find touch device.");
 
     _touchDrv = NULL;
 

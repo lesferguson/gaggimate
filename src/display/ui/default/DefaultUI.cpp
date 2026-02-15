@@ -2,6 +2,7 @@
 
 #include <WiFi.h>
 #include <display/config.h>
+#include <display/core/Log.h>
 #include <display/core/Controller.h>
 #include <display/core/process/BrewProcess.h>
 #include <display/core/process/Process.h>
@@ -703,27 +704,27 @@ void DefaultUI::updateStatusScreen() const {
     // Additional safety: Validate that the process pointer is still valid
     // by checking if it matches either current or last process
     if (process != controller->getProcess() && process != controller->getLastProcess()) {
-        ESP_LOGW("DefaultUI", "Process pointer became invalid during access, skipping update");
+        Logger.warning(LOG_DRIVER, "Process pointer became invalid during access, skipping update");
         return;
     }
 
     auto *brewProcess = static_cast<BrewProcess *>(process);
     if (brewProcess == nullptr) {
-        ESP_LOGE("DefaultUI", "brewProcess is null after cast");
+        Logger.error(LOG_DRIVER, "brewProcess is null after cast");
         return;
     }
 
     // Validate the brewProcess object before accessing its members
     // Check if the object is in a reasonable state by validating key fields
     if (brewProcess->profile.phases.empty() || brewProcess->phaseIndex >= brewProcess->profile.phases.size()) {
-        ESP_LOGE("DefaultUI", "brewProcess phaseIndex out of bounds: %u >= %zu", brewProcess->phaseIndex,
-                 brewProcess->profile.phases.size());
+        Logger.error(LOG_DRIVER, "brewProcess phaseIndex out of bounds: %u >= %zu", brewProcess->phaseIndex,
+                     brewProcess->profile.phases.size());
         return;
     }
 
     // Final safety check before accessing brewProcess members
     if (!brewProcess) {
-        ESP_LOGE("DefaultUI", "brewProcess became null after validation");
+        Logger.error(LOG_DRIVER, "brewProcess became null after validation");
         return;
     }
 

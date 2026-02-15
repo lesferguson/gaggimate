@@ -1,4 +1,5 @@
 #include "TCA9554PWR.h"
+#include <display/core/Log.h>
 
 /*****************************************************  Operation register REG
  * ****************************************************/
@@ -8,7 +9,7 @@ uint8_t I2C_Read_EXIO(uint8_t REG) // Read the value of the TCA9554PWR register 
     Wire.write(REG);
     uint8_t result = Wire.endTransmission();
     if (result != 0) {
-        printf("Data Transfer Failure !!!\r\n");
+        Logger.error(LOG_DRIVER, "Data Transfer Failure !!!");
     }
     Wire.requestFrom(TCA9554_ADDRESS, 1);
     uint8_t bitsStatus = Wire.read();
@@ -21,7 +22,7 @@ uint8_t I2C_Write_EXIO(uint8_t REG, uint8_t Data) // Write Data to the REG regis
     Wire.write(Data);
     uint8_t result = Wire.endTransmission();
     if (result != 0) {
-        printf("Data write failure!!!\r\n");
+        Logger.error(LOG_DRIVER, "Data write failure!!!");
         return -1;
     }
     return 0;
@@ -35,14 +36,14 @@ void Mode_EXIO(uint8_t Pin, uint8_t State) // Set the mode of the TCA9554PWR Pin
     uint8_t Data = (0x01 << (Pin - 1)) | bitsStatus;
     uint8_t result = I2C_Write_EXIO(TCA9554_CONFIG_REG, Data);
     if (result != 0) {
-        printf("I/O Configuration Failure !!!\r\n");
+        Logger.error(LOG_DRIVER, "I/O Configuration Failure !!!");
     }
 }
 void Mode_EXIOS(uint8_t PinState) // Set the mode of the 7 pins from the TCA9554PWR with PinState
 {
     uint8_t result = I2C_Write_EXIO(TCA9554_CONFIG_REG, PinState);
     if (result != 0) {
-        printf("I/O Configuration Failure !!!\r\n");
+        Logger.error(LOG_DRIVER, "I/O Configuration Failure !!!");
     }
 }
 /********************************************************** Read EXIO status
@@ -74,17 +75,17 @@ void Set_EXIO(uint8_t Pin, uint8_t State) // Sets the level state of the Pin wit
             Data = (~(0x01 << (Pin - 1))) & bitsStatus;
         uint8_t result = I2C_Write_EXIO(TCA9554_OUTPUT_REG, Data);
         if (result != 0) {
-            printf("Failed to set GPIO!!!\r\n");
+            Logger.error(LOG_DRIVER, "Failed to set GPIO!!!");
         }
     } else
-        printf("Parameter error, please enter the correct parameter!\r\n");
+        Logger.error(LOG_DRIVER, "Parameter error, please enter the correct parameter!");
 }
 void Set_EXIOS(
     uint8_t PinState) // Set 7 pins to the PinState state such as :PinState=0x23, 0010 0011 state (the highest bit is not used)
 {
     uint8_t result = I2C_Write_EXIO(TCA9554_OUTPUT_REG, PinState);
     if (result != 0) {
-        printf("Failed to set GPIO!!!\r\n");
+        Logger.error(LOG_DRIVER, "Failed to set GPIO!!!");
     }
 }
 /********************************************************** Flip EXIO state

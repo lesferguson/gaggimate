@@ -21,14 +21,14 @@
 #include <display/plugins/ShotHistoryPlugin.h>
 #include <display/plugins/SmartGrindPlugin.h>
 #include <display/plugins/WebUIPlugin.h>
+#include <display/plugins/SyslogPlugin.h>
 #include <display/plugins/mDNSPlugin.h>
 #ifndef GAGGIMATE_HEADLESS
 #include <display/drivers/AmoledDisplayDriver.h>
 #include <display/drivers/LilyGoDriver.h>
 #include <display/drivers/WaveshareDriver.h>
 #endif
-
-const String LOG_TAG = F("Controller");
+#include <display/core/Log.h>
 
 void Controller::setup() {
     mode = settings.getStartupMode();
@@ -36,6 +36,8 @@ void Controller::setup() {
     if (!SPIFFS.begin(true)) {
         Serial.println(F("An Error has occurred while mounting SPIFFS"));
     }
+
+    // Logging will be fully initialized after SD card detection below
 
 #ifndef GAGGIMATE_HEADLESS
     setupPanel();
@@ -46,10 +48,13 @@ void Controller::setup() {
     ui = new DefaultUI(this, driver, pluginManager);
     if (driver->supportsSDCard() && driver->installSDCard()) {
         sdcard = true;
-        ESP_LOGI(LOG_TAG, "SD Card detected and mounted");
-        ESP_LOGI(LOG_TAG, "Used: %lluMB, Capacity: %lluMB", SD_MMC.usedBytes() / 1024 / 1024, SD_MMC.cardSize() / 1024 / 1024);
     }
 #endif
+    initLogging(sdcard);
+    if (sdcard) {
+        Logger.info(LOG_CORE, "SD Card detected and mounted");
+        Logger.info(LOG_CORE, "Used: %lluMB, Capacity: %lluMB", SD_MMC.usedBytes() / 1024 / 1024, SD_MMC.cardSize() / 1024 / 1024);
+    }
     FS *fs = &SPIFFS;
     if (sdcard) {
         fs = &SD_MMC;
@@ -74,6 +79,7 @@ void Controller::setup() {
     pluginManager->registerPlugin(&BLEScales);
     pluginManager->registerPlugin(new LedControlPlugin());
     pluginManager->registerPlugin(new AutoWakeupPlugin());
+    pluginManager->registerPlugin(new SyslogPlugin());
     pluginManager->setup(this);
 
     pluginManager->on("profiles:profile:save", [this](Event const &event) {
@@ -124,7 +130,7 @@ void Controller::setupPanel() {
     } else if (WaveshareDriver::getInstance()->isCompatible()) {
         driver = WaveshareDriver::getInstance();
     } else {
-        Serial.println("No compatible display driver found");
+        Logger.error(LOG_DRIVER, "No compatible display driver found");
         delay(10000);
         ESP.restart();
     }
@@ -153,11 +159,11 @@ void Controller::setupBluetooth() {
             deactivate();
             setMode(MODE_STANDBY);
             pluginManager->trigger(F("controller:error"));
-            ESP_LOGE(LOG_TAG, "Received error %d", error);
+            Logger.error(LOG_CORE, "Received error %d", error);
         }
     });
     clientController.registerAutotuneResultCallback([this](const float Kp, const float Ki, const float Kd, const float Kf) {
-        ESP_LOGI(LOG_TAG, "Received autotune values: Kp=%.3f, Ki=%.3f, Kd=%.3f, Kf=%.3f (combined)", Kp, Ki, Kd, Kf);
+        Logger.info(LOG_CORE, "Received autotune values: Kp=%.3f, Ki=%.3f, Kd=%.3f, Kf=%.3f (combined)", Kp, Ki, Kd, Kf);
         char pid[64];
         // Store in simplified format with combined Kf
         snprintf(pid, sizeof(pid), "%.3f,%.3f,%.3f,%.3f", Kp, Ki, Kd, Kf);
@@ -169,7 +175,7 @@ void Controller::setupBluetooth() {
         [this](const float value) { onVolumetricMeasurement(value, VolumetricMeasurementSource::FLOW_ESTIMATION); });
     clientController.registerTofMeasurementCallback([this](const int value) {
         tofDistance = value;
-        ESP_LOGV(LOG_TAG, "Received new TOF distance: %d", value);
+        Logger.verbose(LOG_CORE, "Received new TOF distance: %d", value);
         pluginManager->trigger("controller:tof:change", "value", value);
     });
     pluginManager->trigger("controller:bluetooth:init");
@@ -177,11 +183,11 @@ void Controller::setupBluetooth() {
 
 void Controller::setupInfos() {
     const std::string info = clientController.readInfo();
-    printf("System info: %s\n", info.c_str());
+    Logger.info(LOG_CORE, "System info: %s", info.c_str());
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, info);
     if (err) {
-        printf("Error deserializing JSON: %s\n", err.c_str());
+        Logger.error(LOG_CORE, "Error deserializing JSON: %s", err.c_str());
         systemInfo = SystemInfo{
             .hardware = "GaggiMate Standard 1.x", .version = "v1.0.0", .capabilities = {.dimming = false, .pressure = false}};
     } else {
@@ -209,17 +215,15 @@ void Controller::setupWifi() {
                 break;
             }
             delay(500);
-            Serial.print(".");
         }
-        Serial.println("");
         if (WiFi.status() == WL_CONNECTED) {
-            ESP_LOGI(LOG_TAG, "Connected to %s with IP address %s", settings.getWifiSsid().c_str(),
-                     WiFi.localIP().toString().c_str());
+            Logger.info(LOG_CORE, "Connected to %s with IP address %s", settings.getWifiSsid().c_str(),
+                        WiFi.localIP().toString().c_str());
             WiFi.onEvent([this](WiFiEvent_t, WiFiEventInfo_t) { pluginManager->trigger("controller:wifi:connect", "AP", 0); },
                          WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);
             WiFi.onEvent(
                 [this](WiFiEvent_t, WiFiEventInfo_t info) {
-                    ESP_LOGI(LOG_TAG, "Lost WiFi connection. Reason: %d", info.wifi_sta_disconnected.reason);
+                    Logger.info(LOG_CORE, "Lost WiFi connection. Reason: %d", info.wifi_sta_disconnected.reason);
                     pluginManager->trigger("controller:wifi:disconnect");
                 },
                 WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
@@ -231,8 +235,7 @@ void Controller::setupWifi() {
             sntp_init();
         } else {
             WiFi.disconnect(true, true);
-            ESP_LOGI(LOG_TAG, "Timed out while connecting to WiFi");
-            Serial.println("Timed out while connecting to WiFi");
+            Logger.info(LOG_CORE, "Timed out while connecting to WiFi");
         }
     }
     if (WiFi.status() != WL_CONNECTED) {
@@ -241,7 +244,7 @@ void Controller::setupWifi() {
         WiFi.softAPConfig(WIFI_AP_IP, WIFI_AP_IP, WIFI_SUBNET_MASK);
         WiFi.softAP(WIFI_AP_SSID);
         WiFi.setTxPower(WIFI_POWER_19_5dBm);
-        ESP_LOGI(LOG_TAG, "Started WiFi AP %s", WIFI_AP_SSID);
+        Logger.info(LOG_CORE, "Started WiFi AP %s", WIFI_AP_SSID);
     }
 
     pluginManager->on("ota:update:start", [this](Event const &) { this->updating = true; });
@@ -266,7 +269,7 @@ void Controller::loop() {
             if (settings.getStartupMode() == MODE_STANDBY)
                 activateStandby();
 
-            ESP_LOGI(LOG_TAG, "setting pressure scale to %.2f\n", settings.getPressureScaling());
+            Logger.info(LOG_CORE, "setting pressure scale to %.2f", settings.getPressureScaling());
             setPressureScale();
             clientController.sendPidSettings(settings.getPid());
             clientController.sendPumpModelCoeffs(settings.getPumpModelCoeffs());
@@ -369,11 +372,13 @@ void Controller::autotune(int testTime, int samples) {
 
 void Controller::startProcess(Process *process) {
     if (isActive() || !isReady()) {
+        Logger.warning(LOG_CORE, "Cannot start process: active=%d ready=%d", isActive(), isReady());
         delete process;
         return;
     }
     processCompleted = false;
     this->currentProcess = process;
+    Logger.info(LOG_CORE, "Process started (type=%d)", process->getType());
     pluginManager->trigger("controller:process:start");
     updateLastAction();
 }
@@ -545,6 +550,7 @@ void Controller::updateControl() {
 void Controller::activate() {
     if (isActive())
         return;
+    Logger.info(LOG_CORE, "Activating mode=%d volumetric=%d", mode, isVolumetricAvailable());
     clear();
     clientController.tare();
     if (isVolumetricAvailable()) {
@@ -583,6 +589,7 @@ void Controller::deactivate() {
     if (currentProcess == nullptr) {
         return;
     }
+    Logger.info(LOG_CORE, "Deactivating process (type=%d)", currentProcess->getType());
     delete lastProcess;
     lastProcess = currentProcess;
     currentProcess = nullptr;
@@ -609,6 +616,7 @@ void Controller::activateGrind() {
     pluginManager->trigger("controller:grind:start");
     if (isGrindActive())
         return;
+    Logger.info(LOG_CORE, "Activating grind volumetric=%d", settings.isVolumetricTarget() && isVolumetricAvailable());
     clear();
     if (settings.isVolumetricTarget() && isVolumetricAvailable()) {
         currentVolumetricSource = VolumetricMeasurementSource::BLUETOOTH;
@@ -683,7 +691,7 @@ void Controller::onVolumetricMeasurement(double measurement, VolumetricMeasureme
     }
 
     if (currentVolumetricSource != source) {
-        ESP_LOGD(LOG_TAG, "Ignoring volumetric measurement, source does not match");
+        Logger.debug(LOG_CORE, "Ignoring volumetric measurement, source does not match");
         return;
     }
     if (currentProcess != nullptr) {
@@ -701,15 +709,17 @@ bool Controller::isBluetoothScaleHealthy() const {
 
 void Controller::onFlush() {
     if (isActive()) {
+        Logger.warning(LOG_CORE, "Flush requested but process already active");
         return;
     }
+    Logger.info(LOG_CORE, "Starting flush");
     clear();
     startProcess(new BrewProcess(FLUSH_PROFILE, ProcessTarget::TIME, settings.getBrewDelay()));
     pluginManager->trigger("controller:brew:start");
 }
 
 void Controller::handleBrewButton(int brewButtonStatus) {
-    printf("current screen %d, brew button %d\n", getMode(), brewButtonStatus);
+    Logger.info(LOG_CORE, "current screen %d, brew button %d", getMode(), brewButtonStatus);
     if (brewButtonStatus) {
         switch (getMode()) {
         case MODE_STANDBY:
@@ -749,7 +759,7 @@ void Controller::handleBrewButton(int brewButtonStatus) {
 }
 
 void Controller::handleSteamButton(int steamButtonStatus) {
-    printf("current screen %d, steam button %d\n", getMode(), steamButtonStatus);
+    Logger.info(LOG_CORE, "current screen %d, steam button %d", getMode(), steamButtonStatus);
     if (steamButtonStatus) {
         switch (getMode()) {
         case MODE_STANDBY:

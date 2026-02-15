@@ -2,6 +2,7 @@
 #include "../core/Controller.h"
 #include <ArduinoJson.h>
 #include <ctime>
+#include <display/core/Log.h>
 
 bool MQTTPlugin::connect(Controller *controller) {
     const Settings settings = controller->getSettings();
@@ -13,16 +14,16 @@ bool MQTTPlugin::connect(Controller *controller) {
 
     client.begin(ip.c_str(), haPort, net);
     client.setKeepAlive(10);
-    printf("Connecting to MQTT");
+    Logger.info(LOG_MQTT, "Connecting to MQTT");
     for (int i = 0; i < MQTT_CONNECTION_RETRIES; i++) {
         if (client.connect(clientId.c_str(), haUser.c_str(), haPassword.c_str())) {
-            printf("\n");
+            Logger.info(LOG_MQTT, "Connected to MQTT");
             return true;
         }
-        printf(".");
+        Logger.info(LOG_MQTT, ".");
         delay(MQTT_CONNECTION_DELAY);
     }
-    printf("\nConnection to MQTT failed.\n");
+    Logger.error(LOG_MQTT, "Connection to MQTT failed.");
     return false;
 }
 

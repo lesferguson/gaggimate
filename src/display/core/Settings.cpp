@@ -1,6 +1,7 @@
 #include "Settings.h"
 
 #include <algorithm>
+#include <display/core/Log.h>
 #include <utility>
 
 Settings::Settings() {
@@ -111,6 +112,11 @@ Settings::Settings() {
     emptyTankDistance = preferences.getInt("sr_ed", 200);
     fullTankDistance = preferences.getInt("sr_fd", 50);
     altRelayFunction = preferences.getInt("alt_relay", ALT_RELAY_GRIND);
+
+    // Syslog settings
+    syslogEnabled = preferences.getBool("sl_en", false);
+    syslogHost = preferences.getString("sl_h", "");
+    syslogPort = preferences.getInt("sl_p", 514);
 
     preferences.end();
 
@@ -460,12 +466,27 @@ void Settings::setAutoWakeupSchedules(const std::vector<AutoWakeupSchedule> &sch
     save();
 }
 
+void Settings::setSyslogEnabled(bool enabled) {
+    syslogEnabled = enabled;
+    save();
+}
+
+void Settings::setSyslogHost(const String &host) {
+    syslogHost = host;
+    save();
+}
+
+void Settings::setSyslogPort(int port) {
+    syslogPort = port;
+    save();
+}
+
 void Settings::doSave() {
     if (!dirty) {
         return;
     }
     dirty = false;
-    ESP_LOGI("Settings", "Saving settings");
+    Logger.info(LOG_SETTINGS, "Saving settings");
     preferences.begin(PREFERENCES_KEY, false);
     preferences.putInt("sm", startupMode);
     preferences.putInt("tb", targetBrewTemp);
@@ -548,6 +569,11 @@ void Settings::doSave() {
     preferences.putInt("sr_ed", emptyTankDistance);
     preferences.putInt("sr_fd", fullTankDistance);
     preferences.putInt("alt_relay", altRelayFunction);
+
+    // Syslog settings
+    preferences.putBool("sl_en", syslogEnabled);
+    preferences.putString("sl_h", syslogHost);
+    preferences.putInt("sl_p", syslogPort);
 
     preferences.end();
 }

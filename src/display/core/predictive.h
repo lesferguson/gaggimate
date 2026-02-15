@@ -2,6 +2,7 @@
 #define PREDICTIVE_H
 
 #include <Arduino.h>
+#include <display/core/Log.h>
 
 class VolumetricRateCalculator {
   public:
@@ -63,14 +64,14 @@ class VolumetricRateCalculator {
         const double rate = getRate(measurementTimes.back());
 
         if (rate < 1e-10) {
-            ESP_LOGW("VolumetricRateCalculator", "Invalid rate: %f", rate);
+            Logger.warning(LOG_CORE, "Invalid rate: %f", rate);
             return 0.0;
         }
 
         const double adjust = overshoot / rate;
 
         if (isnan(adjust) || isinf(adjust) || adjust < 0.0) {
-            ESP_LOGW("VolumetricRateCalculator", "Invalid adjust: %f", adjust);
+            Logger.warning(LOG_CORE, "Invalid adjust: %f", adjust);
             return 0.0;
         }
 

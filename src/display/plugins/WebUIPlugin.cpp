@@ -2,6 +2,7 @@
 #include <DNSServer.h>
 #include <SPIFFS.h>
 #include <display/core/Controller.h>
+#include <display/core/Log.h>
 #include <display/core/ProfileManager.h>
 #include <display/core/process/BrewProcess.h>
 #include <display/core/process/GrindProcess.h>
@@ -158,6 +159,10 @@ void WebUIPlugin::loop() {
         lastDns = now;
         dnsServer->processNextRequest();
     }
+    if (!logSubscribers.empty() && now > lastLogTail + 1000) {
+        lastLogTail = now;
+        broadcastLogTail();
+    }
 }
 
 void WebUIPlugin::setupServer() {
@@ -210,10 +215,11 @@ void WebUIPlugin::setupServer() {
         [this](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
             if (type == WS_EVT_CONNECT) {
                 client->setCloseClientOnQueueFull(true);
-                ESP_LOGI("WebUIPlugin", "WebSocket client connected (%d open connections)", server->getClients().size());
+                Logger.info(LOG_WEBUI, "WebSocket client connected (%d open connections)", server->getClients().size());
             } else if (type == WS_EVT_DISCONNECT) {
-                ESP_LOGI("WebUIPlugin", "WebSocket client disconnected (%d open connections)", server->getClients().size());
+                Logger.info(LOG_WEBUI, "WebSocket client disconnected (%d open connections)", server->getClients().size());
                 rxBuffers.erase(client->id());
+                logSubscribers.erase(client->id());
             } else if (type == WS_EVT_DATA) {
                 handleWebSocketData(server, client, type, arg, data, len);
             }
@@ -224,12 +230,12 @@ void WebUIPlugin::setupServer() {
 void WebUIPlugin::start() {
     stop();
     server.begin();
-    ESP_LOGI("WebUIPlugin", "Started webserver");
+    Logger.info(LOG_WEBUI, "Started webserver");
     if (apMode) {
         dnsServer = new DNSServer();
         dnsServer->setTTL(3600);
         dnsServer->start(53, "*", WIFI_AP_IP);
-        ESP_LOGI("WebUIPlugin", "Started catchall DNS for captive portal");
+        Logger.info(LOG_WEBUI, "Started catchall DNS for captive portal");
     }
     lastUpdateCheck = millis();
     serverRunning = true;
@@ -269,7 +275,7 @@ void WebUIPlugin::handleWebSocketData(AsyncWebSocket *server, AsyncWebSocketClie
     // If this is the final frame of the message, process and clear
     if (isFinal) {
         if (info->opcode == WS_TEXT) {
-            ESP_LOGV("WebUIPlugin", "Received request: %.*s", (int)buf.size(), buf.c_str());
+            Logger.verbose(LOG_WEBUI, "Received request: %.*s", (int)buf.size(), buf.c_str());
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, buf.c_str());
             if (!err) {
@@ -327,6 +333,10 @@ void WebUIPlugin::handleWebSocketData(AsyncWebSocket *server, AsyncWebSocketClie
                     client->text(buffer);
                 } else if (msgType == "req:flush:start") {
                     handleFlushStart(client->id(), doc);
+                } else if (msgType == "req:logs:subscribe") {
+                    logSubscribers.insert(client->id());
+                } else if (msgType == "req:logs:unsubscribe") {
+                    logSubscribers.erase(client->id());
                 }
             }
         }
@@ -364,7 +374,7 @@ void WebUIPlugin::handleAutotuneStart(uint32_t clientId, JsonDocument &request) 
 void WebUIPlugin::handleProfileRequest(uint32_t clientId, JsonDocument &request) {
     JsonDocument response;
     auto type = request["tp"].as<String>();
-    ESP_LOGI("WebUIPlugin", "Handling request: %s", type.c_str());
+    Logger.info(LOG_WEBUI, "Handling request: %s", type.c_str());
     response["tp"] = String("res:") + type.substring(4);
     response["rid"] = request["rid"].as<String>();
 
@@ -557,6 +567,11 @@ void WebUIPlugin::handleSettings(AsyncWebServerRequest *request) const {
                 }
                 settings->setAutoWakeupSchedules(schedules);
             }
+            settings->setSyslogEnabled(request->hasArg("syslogEnabled"));
+            if (request->hasArg("syslogHost"))
+                settings->setSyslogHost(request->arg("syslogHost"));
+            if (request->hasArg("syslogPort"))
+                settings->setSyslogPort(request->arg("syslogPort").toInt());
             settings->save(true);
         });
         pluginManager->trigger("settings:changed");
@@ -628,6 +643,9 @@ void WebUIPlugin::handleSettings(AsyncWebServerRequest *request) const {
         }
     }
     doc["autowakeupSchedules"] = schedulesStr;
+    doc["syslogEnabled"] = settings.isSyslogEnabled();
+    doc["syslogHost"] = settings.getSyslogHost();
+    doc["syslogPort"] = settings.getSyslogPort();
     serializeJson(doc, *response);
     request->send(response);
 
@@ -773,7 +791,7 @@ void WebUIPlugin::handleCoreDumpDownload(AsyncWebServerRequest *request) {
         return;
     }
 
-    ESP_LOGI("WebUIPlugin", "Streaming core dump: %d bytes from 0x%x", coreSize, coreAddr);
+    Logger.info(LOG_WEBUI, "Streaming core dump: %d bytes from 0x%x", coreSize, coreAddr);
 
     // Create a streaming response
     AsyncWebServerResponse *response =
@@ -789,7 +807,7 @@ void WebUIPlugin::handleCoreDumpDownload(AsyncWebServerRequest *request) {
                                    // Read from partition
                                    esp_err_t err = esp_partition_read(coredump_partition, index, buffer, toRead);
                                    if (err != ESP_OK) {
-                                       ESP_LOGE("WebUIPlugin", "Failed to read core dump: %s", esp_err_to_name(err));
+                                       Logger.error(LOG_WEBUI, "Failed to read core dump: %s", esp_err_to_name(err));
                                        return 0;
                                    }
 
@@ -801,4 +819,24 @@ void WebUIPlugin::handleCoreDumpDownload(AsyncWebServerRequest *request) {
     response->addHeader("Cache-Control", "no-cache");
 
     request->send(response);
+}
+
+void WebUIPlugin::broadcastLogTail() {
+    if (logSubscribers.empty())
+        return;
+
+    char buf[2049];
+    size_t len = webLogStream.drain(buf, sizeof(buf) - 1);
+    if (len == 0)
+        return;
+    buf[len] = '\0';
+
+    JsonDocument doc;
+    doc["tp"] = "evt:logs:tail";
+    doc["content"] = buf;
+    String msg;
+    serializeJson(doc, msg);
+    for (uint32_t id : logSubscribers) {
+        ws.text(id, msg);
+    }
 }

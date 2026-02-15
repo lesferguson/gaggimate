@@ -8,6 +8,7 @@ import { faBluetoothB } from '@fortawesome/free-brands-svg-icons/faBluetoothB';
 import { faCog } from '@fortawesome/free-solid-svg-icons/faCog';
 import { faRotate } from '@fortawesome/free-solid-svg-icons/faRotate';
 import { faChartLine } from '@fortawesome/free-solid-svg-icons/faChartLine';
+import { faFileLines } from '@fortawesome/free-solid-svg-icons/faFileLines';
 
 function MenuItem(props) {
   let className =
@@ -44,6 +45,7 @@ export function Navigation(props) {
       <hr className='h-5 border-0' />
       <div className='space-y-1.5'>
         <MenuItem label='System & Updates' link='/ota' icon={faRotate} />
+        <MenuItem label='Logs' link='/logs' icon={faFileLines} />
       </div>
     </nav>
   );

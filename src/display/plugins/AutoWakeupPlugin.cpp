@@ -1,8 +1,6 @@
 #include "AutoWakeupPlugin.h"
+#include <display/core/Log.h>
 #include <display/core/constants.h>
-#include <esp_log.h>
-
-const String LOG_TAG = F("AutoWakeupPlugin");
 
 AutoWakeupPlugin::AutoWakeupPlugin() {}
 
@@ -11,14 +9,14 @@ void AutoWakeupPlugin::setup(Controller *controller, PluginManager *pluginManage
     this->pluginManager = pluginManager;
     this->settings = &controller->getSettings();
 
-    ESP_LOGI(LOG_TAG.c_str(), "Auto-wakeup plugin initialized");
+    Logger.info(LOG_WAKEUP, "Auto-wakeup plugin initialized");
 
     // Listen for settings changes to log configuration
     pluginManager->on("settings:changed", [this](const Event &event) {
         if (settings->isAutoWakeupEnabled()) {
-            ESP_LOGI(LOG_TAG.c_str(), "Auto-wakeup enabled with %d schedule(s)", settings->getAutoWakeupSchedules().size());
+            Logger.info(LOG_WAKEUP, "Auto-wakeup enabled with %d schedule(s)", settings->getAutoWakeupSchedules().size());
         } else {
-            ESP_LOGI(LOG_TAG.c_str(), "Auto-wakeup disabled");
+            Logger.info(LOG_WAKEUP, "Auto-wakeup disabled");
         }
     });
 }
@@ -58,7 +56,7 @@ void AutoWakeupPlugin::checkAutoWakeup() {
     // Check if current time and day matches any of the schedules
     for (const AutoWakeupSchedule &schedule : settings->getAutoWakeupSchedules()) {
         if (schedule.time == currentTime && schedule.isDayEnabled(currentDayOfWeek)) {
-            ESP_LOGI(LOG_TAG.c_str(), "Auto-wakeup schedule matched (time: %s, day: %d), switching to brew mode",
+            Logger.info(LOG_WAKEUP, "Auto-wakeup schedule matched (time: %s, day: %d), switching to brew mode",
                      schedule.time.c_str(), currentDayOfWeek);
 
             controller->setMode(MODE_BREW);

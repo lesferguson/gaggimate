@@ -2,6 +2,7 @@
 #define GRINDPROCESS_H
 
 #include <algorithm>
+#include <display/core/Log.h>
 #include <display/core/constants.h>
 #include <display/core/predictive.h>
 #include <display/core/process/Process.h>
@@ -42,7 +43,7 @@ class GrindProcess : public Process {
             active = millis() - started < time;
         } else {
             double currentRate = volumetricRateCalculator.getRate();
-            ESP_LOGI("GrindProcess", "Current rate: %f, Current volume: %f, Expected Offset: %f", currentRate, currentVolume,
+            Logger.info(LOG_GRIND, "Current rate: %f, Current volume: %f, Expected Offset: %f", currentRate, currentVolume,
                      currentRate * grindDelay);
             if (currentVolume + currentRate * grindDelay > grindVolume && active) {
                 active = false;
@@ -53,7 +54,7 @@ class GrindProcess : public Process {
 
     double getNewDelayTime() {
         double newDelay = grindDelay + volumetricRateCalculator.getOvershootAdjustMillis(grindVolume, currentVolume);
-        ESP_LOGI("GrindProcess", "Setting new delay time - Old: %2f, Expected Volume: %f, Actual Volume: %2f, New Delay: %f",
+        Logger.info(LOG_GRIND, "Setting new delay time - Old: %2f, Expected Volume: %f, Actual Volume: %2f, New Delay: %f",
                  grindDelay, grindVolume, currentVolume, newDelay);
         newDelay = std::clamp(newDelay, 0.0, PREDICTIVE_TIME);
         return newDelay;

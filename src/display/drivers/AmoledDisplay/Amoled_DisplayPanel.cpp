@@ -1,6 +1,7 @@
 #include "Amoled_DisplayPanel.h"
 #include "Arduino_GFX_Library.h"
 #include "pin_config.h"
+#include <display/core/Log.h>
 #include <esp_adc_cal.h>
 
 Amoled_DisplayPanel::Amoled_DisplayPanel(AmoledHwConfig hw_config)
@@ -226,7 +227,7 @@ bool Amoled_DisplayPanel::initTouch() {
 
     if (tmp->begin(Wire, CST92XX_DEVICE_ADDRESS, hwConfig.i2c_sda, hwConfig.i2c_scl)) {
         _touchDrv = tmp;
-        ESP_LOGI("Amoled_DisplayPanel", "Successfully initialized %s!\n", _touchDrv->getModelName());
+        Logger.info(LOG_DRIVER, "Successfully initialized %s!", _touchDrv->getModelName());
         tmp->setMaxCoordinates(466, 466);
         if (hwConfig.mirror_touch) {
             tmp->setMirrorXY(true, true);
@@ -245,7 +246,7 @@ bool Amoled_DisplayPanel::initTouch() {
         tmp2->interruptTrigger();
 
         _touchDrv = tmp2;
-        ESP_LOGI("Amoled_DisplayPanel", "Successfully initialized %s!\n", _touchDrv->getModelName());
+        Logger.info(LOG_DRIVER, "Successfully initialized %s!", _touchDrv->getModelName());
 
         touchType = TOUCH_FT3168;
         panelType = DISPLAY_1_43_INCHES;
@@ -253,7 +254,7 @@ bool Amoled_DisplayPanel::initTouch() {
     }
     delete tmp2;
 
-    ESP_LOGE("Amoled_DisplayPanel", "Unable to find touch device.");
+    Logger.error(LOG_DRIVER, "Unable to find touch device.");
     return false;
 }
 
@@ -273,7 +274,7 @@ bool Amoled_DisplayPanel::initDisplay(Amoled_Display_Panel_Color_Order colorOrde
 
     bool success = display->begin(80000000);
     if (!success) {
-        ESP_LOGE("Amoled_DisplayPanel", "Failed to initialize display");
+        Logger.error(LOG_DRIVER, "Failed to initialize display");
         return false;
     }
 

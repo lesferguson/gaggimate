@@ -1,5 +1,6 @@
 #include "LilyGoDriver.h"
 #include <Arduino.h>
+#include <display/core/Log.h>
 #include <display/drivers/common/LV_Helper.h>
 
 LilyGoDriver *LilyGoDriver::instance = nullptr;
@@ -10,10 +11,10 @@ bool LilyGoDriver::isCompatible() {
 }
 
 void LilyGoDriver::init() {
-    printf("Initializing LilyGo driver\n");
+    Logger.info(LOG_DRIVER, "Initializing LilyGo driver");
     if (!panel.begin()) {
         for (uint8_t i = 0; i < 20; i++) {
-            Serial.println(F("Error, failed to initialize T-RGB"));
+            Logger.error(LOG_DRIVER, "Error, failed to initialize T-RGB");
             delay(1000);
         }
         ESP.restart();
