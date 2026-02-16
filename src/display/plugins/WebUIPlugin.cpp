@@ -43,10 +43,17 @@ void WebUIPlugin::setup(Controller *_controller, PluginManager *_pluginManager) 
         },
         "display-firmware.bin", "display-filesystem.bin", "board-firmware.bin");
     pluginManager->on("controller:wifi:connect", [this](Event const &event) {
+        bool wasRunning = serverRunning;
         apMode = event.getInt("AP");
+        if (wasRunning) {
+            Logger.info(LOG_WEBUI, "WiFi reconnected, restarting webserver");
+        }
         start();
     });
-    pluginManager->on("controller:wifi:disconnect", [this](Event const &) { stop(); });
+    pluginManager->on("controller:wifi:disconnect", [this](Event const &) {
+        Logger.warning(LOG_WEBUI, "WiFi disconnected, stopping webserver");
+        stop();
+    });
     pluginManager->on("controller:ready", [this](Event const &) {
         ota->setControllerVersion(controller->getSystemInfo().version);
         ota->init(controller->getClientController()->getClient());
@@ -159,6 +166,15 @@ void WebUIPlugin::loop() {
         lastDns = now;
         dnsServer->processNextRequest();
     }
+    if (now > lastHeapLog + HEAP_LOG_PERIOD) {
+        lastHeapLog = now;
+        uint32_t freeHeap = esp_get_free_heap_size();
+        uint32_t minFreeHeap = esp_get_minimum_free_heap_size();
+        Logger.info(LOG_WEBUI, "Health: heap=%u min=%u WS_clients=%u", freeHeap, minFreeHeap, ws.getClients().size());
+        if (freeHeap < HEAP_WARNING_THRESHOLD) {
+            Logger.warning(LOG_WEBUI, "Low heap warning: %u bytes free (min ever: %u)", freeHeap, minFreeHeap);
+        }
+    }
     if (!logSubscribers.empty() && now > lastLogTail + 1000) {
         lastLogTail = now;
         broadcastLogTail();
@@ -263,6 +279,8 @@ void WebUIPlugin::setupServer() {
                 Logger.info(LOG_WEBUI, "WebSocket client disconnected (%d open connections)", server->getClients().size());
                 rxBuffers.erase(client->id());
                 logSubscribers.erase(client->id());
+            } else if (type == WS_EVT_ERROR) {
+                Logger.error(LOG_WEBUI, "WebSocket error on client %u: %u", client->id(), *((uint16_t *)arg));
             } else if (type == WS_EVT_DATA) {
                 handleWebSocketData(server, client, type, arg, data, len);
             }
@@ -287,8 +305,11 @@ void WebUIPlugin::start() {
 void WebUIPlugin::stop() {
     if (!serverRunning)
         return;
+    Logger.warning(LOG_WEBUI, "Stopping webserver (heap: %u bytes free, WS clients: %u)", esp_get_free_heap_size(),
+                   ws.getClients().size());
     server.end();
     ws.closeAll();
+    logSubscribers.clear();
     if (dnsServer != nullptr) {
         dnsServer->stop();
         delete dnsServer;

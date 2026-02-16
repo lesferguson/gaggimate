@@ -174,9 +174,21 @@ void Controller::setupBluetooth() {
         }
     });
     clientController.registerAutotuneResultCallback([this](const float Kp, const float Ki, const float Kd, const float Kf) {
-        Logger.info(LOG_CORE, "Received autotune values: Kp=%.3f, Ki=%.3f, Kd=%.3f, Kf=%.3f (combined)", Kp, Ki, Kd, Kf);
+        Logger.info(LOG_CORE, "Received autotune values: Kp=%.3f, Ki=%.3f, Kd=%.3f, Kf=%.3f", Kp, Ki, Kd, Kf);
+        // Validate PID values before storing
+        auto isValid = [](float v) { return !isnan(v) && !isinf(v); };
+        if (!isValid(Kp) || !isValid(Ki) || !isValid(Kd) || !isValid(Kf)) {
+            Logger.error(LOG_CORE, "Autotune returned invalid PID values (NaN/Inf), discarding");
+            autotuning = false;
+            return;
+        }
+        if (Kp <= 0.0f || Ki < 0.0f || Kd < 0.0f) {
+            Logger.error(LOG_CORE, "Autotune returned nonsense PID values (Kp<=0 or negative Ki/Kd), discarding");
+            autotuning = false;
+            return;
+        }
+        Logger.info(LOG_CORE, "PID values accepted, previous: %s", settings.getPid().c_str());
         char pid[64];
-        // Store in simplified format with combined Kf
         snprintf(pid, sizeof(pid), "%.3f,%.3f,%.3f,%.3f", Kp, Ki, Kd, Kf);
         settings.setPid(String(pid));
         pluginManager->trigger("controller:autotune:result");
@@ -378,11 +390,13 @@ bool Controller::isVolumetricAvailable() const {
 
 void Controller::autotune(int testTime, int samples) {
     if (isActive() || !isReady()) {
+        Logger.warning(LOG_CORE, "Autotune rejected: active=%d ready=%d", isActive(), isReady());
         return;
     }
     if (mode != MODE_STANDBY) {
         activateStandby();
     }
+    Logger.info(LOG_CORE, "Starting autotune (testTime=%ds, samples=%d)", testTime, samples);
     autotuning = true;
     clientController.sendAutotune(testTime, samples);
     pluginManager->trigger("controller:autotune:start");
