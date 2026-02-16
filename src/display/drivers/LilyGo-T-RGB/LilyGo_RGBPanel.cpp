@@ -437,7 +437,7 @@ bool LilyGo_RGBPanel::initTouch() {
     const uint8_t touch_irq_pin = BOARD_TOUCH_IRQ;
     bool result = false;
 
-    Logger.info(LOG_DRIVER, "=================initTouch====================");
+    Logger.debug(LOG_DRIVER, "=================initTouch====================");
     _touchDrv = new TouchDrvCSTXXX();
     _touchDrv->setGpioCallback(TouchDrvPinMode, TouchDrvDigitalWrite, TouchDrvDigitalRead);
     _touchDrv->setPins(touch_reset_pin, touch_irq_pin);

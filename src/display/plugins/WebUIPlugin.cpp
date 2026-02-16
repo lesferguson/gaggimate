@@ -209,6 +209,46 @@ void WebUIPlugin::setupServer() {
         }
     });
     server.on("/api/core-dump", HTTP_GET, [this](AsyncWebServerRequest *request) { handleCoreDumpDownload(request); });
+    server.on("/api/logs/info", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        JsonDocument doc;
+        bool hasSD = controller->isSDCard();
+        FS &fs = hasSD ? (FS &)SD_MMC : (FS &)SPIFFS;
+        const char *logPath = hasSD ? "/logs/system.log" : "/system.log";
+        const char *oldPath = hasSD ? "/logs/system.old" : "/system.old";
+        doc["storage"] = hasSD ? "sd" : "spiffs";
+        doc["path"] = logPath;
+        if (fs.exists(logPath)) {
+            File f = fs.open(logPath, FILE_READ);
+            doc["size"] = f ? (int)f.size() : 0;
+            if (f) f.close();
+        } else {
+            doc["size"] = 0;
+        }
+        if (fs.exists(oldPath)) {
+            File f = fs.open(oldPath, FILE_READ);
+            doc["oldSize"] = f ? (int)f.size() : 0;
+            if (f) f.close();
+        } else {
+            doc["oldSize"] = 0;
+        }
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+    server.on("/api/logs/download", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        bool hasSD = controller->isSDCard();
+        FS &fs = hasSD ? (FS &)SD_MMC : (FS &)SPIFFS;
+        const char *logPath = hasSD ? "/logs/system.log" : "/system.log";
+        bool old = request->hasParam("old");
+        if (old) {
+            logPath = hasSD ? "/logs/system.old" : "/system.old";
+        }
+        if (!fs.exists(logPath)) {
+            request->send(404, "text/plain", "No log file found");
+            return;
+        }
+        request->send(fs, logPath, "text/plain");
+    });
     server.onNotFound([](AsyncWebServerRequest *request) { request->send(SPIFFS, "/w/index.html"); });
     server.serveStatic("/", SPIFFS, "/w").setDefaultFile("index.html").setCacheControl("max-age=0");
     ws.onEvent(
@@ -374,7 +414,7 @@ void WebUIPlugin::handleAutotuneStart(uint32_t clientId, JsonDocument &request) 
 void WebUIPlugin::handleProfileRequest(uint32_t clientId, JsonDocument &request) {
     JsonDocument response;
     auto type = request["tp"].as<String>();
-    Logger.info(LOG_WEBUI, "Handling request: %s", type.c_str());
+    Logger.debug(LOG_WEBUI, "Handling request: %s", type.c_str());
     response["tp"] = String("res:") + type.substring(4);
     response["rid"] = request["rid"].as<String>();
 

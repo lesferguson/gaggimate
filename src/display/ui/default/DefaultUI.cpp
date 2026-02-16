@@ -252,7 +252,9 @@ void DefaultUI::loop() {
 
 void DefaultUI::loopProfiles() {
     if (!profileLoaded && currentProfileId != "") {
-        profileManager->loadProfile(currentProfileId, currentProfileChoice);
+        if (!profileManager->loadProfile(currentProfileId, currentProfileChoice)) {
+            Logger.warning(LOG_DRIVER, "Failed to load profile: %s", currentProfileId.c_str());
+        }
         profileLoaded = 1;
     }
 }

@@ -35,6 +35,6 @@ void SmartGrindPlugin::controlRelay(String command) {
     http.begin(serverPath);
     int responseCode = http.GET();
     if (responseCode != 200) {
-        Logger.error(LOG_GRIND, "Failed to switch Relay");
+        Logger.error(LOG_GRIND, "Failed to switch relay (HTTP %d): %s", responseCode, serverPath.c_str());
     }
 }

@@ -886,7 +886,7 @@ bool WavesharePanel::initTouch() {
     delay(100);
     TouchDrvDigitalWrite(0, High);
 
-    Logger.info(LOG_DRIVER, "=================initTouch====================");
+    Logger.debug(LOG_DRIVER, "=================initTouch====================");
     _touchDrv = new TouchDrvCSTXXX();
     _touchDrv->setGpioCallback(TouchDrvPinMode, TouchDrvDigitalWrite, TouchDrvDigitalRead);
     _touchDrv->setPins(0x00, touch_irq_pin);

@@ -137,7 +137,7 @@ void BLEScalePlugin::update() {
         scale->update();
         if (!hasConnectedScale) {
             reconnectionTries++;
-            Logger.info(LOG_BLE_SCALE, "Scale disconnected, reconnection attempt %d/%d", reconnectionTries, RECONNECTION_TRIES);
+            Logger.debug(LOG_BLE_SCALE, "Scale disconnected, reconnection attempt %d/%d", reconnectionTries, RECONNECTION_TRIES);
             if (reconnectionTries > RECONNECTION_TRIES) {
                 Logger.warning(LOG_BLE_SCALE, "Max reconnection attempts reached, disconnecting and restarting scan");
                 disconnect();
@@ -256,7 +256,7 @@ void BLEScalePlugin::establishConnection() {
 
             scale->setLogCallback([](std::string message) {
                 if (!message.empty()) {
-                    Logger.info(LOG_BLE_SCALE, "[scale] %s", message.c_str());
+                    Logger.debug(LOG_BLE_SCALE, "[scale] %s", message.c_str());
                 }
             });
 

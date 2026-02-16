@@ -2,6 +2,7 @@
 #define LOG_H
 
 #include <Elog.h>
+#include <FS.h>
 
 enum LogId : uint8_t {
     LOG_CORE = 0,
@@ -43,7 +44,36 @@ class WebLogStream : public Stream {
     size_t readPos = 0;
 };
 
+// Buffered file stream that writes Elog output to SD_MMC or SPIFFS
+class FileLogStream : public Stream {
+  public:
+    static constexpr size_t WRITE_BUFFER_SIZE = 2048;
+    static constexpr size_t FLUSH_THRESHOLD = 512;
+
+    bool begin(FS &fs, const char *logPath, const char *oldPath, size_t maxFileSize);
+
+    size_t write(uint8_t c) override;
+    size_t write(const uint8_t *buffer, size_t size) override;
+    int available() override { return 0; }
+    int read() override { return -1; }
+    int peek() override { return -1; }
+
+  private:
+    void flushBuffer();
+    void rotate();
+
+    FS *_fs = nullptr;
+    const char *_logPath = nullptr;
+    const char *_oldPath = nullptr;
+    size_t _maxFileSize = 0;
+    size_t _fileSize = 0;
+    uint8_t _buffer[WRITE_BUFFER_SIZE]{};
+    size_t _bufferPos = 0;
+    bool _ready = false;
+};
+
 extern WebLogStream webLogStream;
+extern FileLogStream fileLogStream;
 
 void initLogging(bool hasSDCard);
 

@@ -84,7 +84,7 @@ static void touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data) {
 
 #if LV_USE_LOG
 void lv_log_print_g_cb(const char *buf) {
-    Logger.info(LOG_DRIVER, "%s", buf);
+    Logger.debug(LOG_DRIVER, "%s", buf);
 }
 #endif
 

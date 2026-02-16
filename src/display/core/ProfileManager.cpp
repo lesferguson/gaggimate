@@ -95,8 +95,10 @@ void ProfileManager::migrate() {
 std::vector<String> ProfileManager::listProfiles() {
     std::vector<String> uuids;
     File root = _fs->open(_dir);
-    if (!root || !root.isDirectory())
+    if (!root || !root.isDirectory()) {
+        Logger.warning(LOG_PROFILE, "Failed to open profile directory: %s", _dir.c_str());
         return uuids;
+    }
 
     File file = root.openNextFile();
     while (file) {
@@ -127,16 +129,21 @@ std::vector<String> ProfileManager::listProfiles() {
 
 bool ProfileManager::loadProfile(const String &uuid, Profile &outProfile) {
     File file = _fs->open(profilePath(uuid), "r");
-    if (!file)
+    if (!file) {
+        Logger.warning(LOG_PROFILE, "Failed to open profile: %s", uuid.c_str());
         return false;
+    }
 
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, file);
     file.close();
-    if (err)
+    if (err) {
+        Logger.error(LOG_PROFILE, "Failed to parse profile %s: %s", uuid.c_str(), err.c_str());
         return false;
+    }
 
     if (!parseProfile(doc.as<JsonObject>(), outProfile)) {
+        Logger.error(LOG_PROFILE, "Invalid profile structure: %s", uuid.c_str());
         return false;
     }
     outProfile.selected = outProfile.id == _settings.getSelectedProfile();
@@ -146,8 +153,10 @@ bool ProfileManager::loadProfile(const String &uuid, Profile &outProfile) {
 }
 
 bool ProfileManager::saveProfile(Profile &profile) {
-    if (!ensureDirectory())
+    if (!ensureDirectory()) {
+        Logger.error(LOG_PROFILE, "Failed to create profile directory: %s", _dir.c_str());
         return false;
+    }
     bool isNew = false;
 
     if (profile.id == nullptr || profile.id.isEmpty()) {
@@ -158,8 +167,10 @@ bool ProfileManager::saveProfile(Profile &profile) {
     Logger.info(LOG_PROFILE, "Saving profile %s", profile.id.c_str());
 
     File file = _fs->open(profilePath(profile.id), "w");
-    if (!file)
+    if (!file) {
+        Logger.error(LOG_PROFILE, "Failed to write profile: %s", profile.id.c_str());
         return false;
+    }
 
     JsonDocument doc;
     JsonObject obj = doc.to<JsonObject>();

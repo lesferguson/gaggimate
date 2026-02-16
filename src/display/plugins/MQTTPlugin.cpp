@@ -18,9 +18,10 @@ bool MQTTPlugin::connect(Controller *controller) {
     for (int i = 0; i < MQTT_CONNECTION_RETRIES; i++) {
         if (client.connect(clientId.c_str(), haUser.c_str(), haPassword.c_str())) {
             Logger.info(LOG_MQTT, "Connected to MQTT");
+            wasConnected = true;
             return true;
         }
-        Logger.info(LOG_MQTT, ".");
+        Logger.debug(LOG_MQTT, ".");
         delay(MQTT_CONNECTION_DELAY);
     }
     Logger.error(LOG_MQTT, "Connection to MQTT failed.");
@@ -28,8 +29,10 @@ bool MQTTPlugin::connect(Controller *controller) {
 }
 
 void MQTTPlugin::publishDiscovery(Controller *controller) {
-    if (!client.connected())
+    if (!client.connected()) {
+        Logger.warning(LOG_MQTT, "Cannot publish discovery, not connected");
         return;
+    }
     const Settings settings = controller->getSettings();
     const String haTopic = settings.getHomeAssistantTopic();
     String mac = WiFi.macAddress();
@@ -102,8 +105,13 @@ void MQTTPlugin::publishDiscovery(Controller *controller) {
 }
 
 void MQTTPlugin::publish(const std::string &topic, const std::string &message) {
-    if (!client.connected())
+    if (!client.connected()) {
+        if (wasConnected) {
+            Logger.warning(LOG_MQTT, "MQTT connection lost, messages will be dropped");
+            wasConnected = false;
+        }
         return;
+    }
     String mac = WiFi.macAddress();
     mac.replace(":", "_");
     const char *cmac = mac.c_str();

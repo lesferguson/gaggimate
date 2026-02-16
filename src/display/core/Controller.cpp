@@ -34,7 +34,7 @@ void Controller::setup() {
     mode = settings.getStartupMode();
 
     if (!SPIFFS.begin(true)) {
-        Serial.println(F("An Error has occurred while mounting SPIFFS"));
+        Serial.println(F("[CTL] [ERROR] Failed to mount SPIFFS filesystem"));
     }
 
     // Logging will be fully initialized after SD card detection below
@@ -269,7 +269,7 @@ void Controller::loop() {
             if (settings.getStartupMode() == MODE_STANDBY)
                 activateStandby();
 
-            Logger.info(LOG_CORE, "setting pressure scale to %.2f", settings.getPressureScaling());
+            Logger.debug(LOG_CORE, "setting pressure scale to %.2f", settings.getPressureScaling());
             setPressureScale();
             clientController.sendPidSettings(settings.getPid());
             clientController.sendPumpModelCoeffs(settings.getPumpModelCoeffs());
@@ -691,7 +691,6 @@ void Controller::onVolumetricMeasurement(double measurement, VolumetricMeasureme
     }
 
     if (currentVolumetricSource != source) {
-        Logger.debug(LOG_CORE, "Ignoring volumetric measurement, source does not match");
         return;
     }
     if (currentProcess != nullptr) {
@@ -719,7 +718,7 @@ void Controller::onFlush() {
 }
 
 void Controller::handleBrewButton(int brewButtonStatus) {
-    Logger.info(LOG_CORE, "current screen %d, brew button %d", getMode(), brewButtonStatus);
+    Logger.debug(LOG_CORE, "current screen %d, brew button %d", getMode(), brewButtonStatus);
     if (brewButtonStatus) {
         switch (getMode()) {
         case MODE_STANDBY:
@@ -759,7 +758,7 @@ void Controller::handleBrewButton(int brewButtonStatus) {
 }
 
 void Controller::handleSteamButton(int steamButtonStatus) {
-    Logger.info(LOG_CORE, "current screen %d, steam button %d", getMode(), steamButtonStatus);
+    Logger.debug(LOG_CORE, "current screen %d, steam button %d", getMode(), steamButtonStatus);
     if (steamButtonStatus) {
         switch (getMode()) {
         case MODE_STANDBY:
