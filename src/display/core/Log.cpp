@@ -22,22 +22,52 @@ size_t WebLogStream::write(const uint8_t *buffer, size_t size) {
     return size;
 }
 
-size_t WebLogStream::drain(char *out, size_t maxLen) {
-    size_t wp = writePos;
-    // If reader fell behind by more than buffer size, skip ahead
-    if (wp - readPos > BUFFER_SIZE) {
-        readPos = wp - BUFFER_SIZE;
+size_t WebLogStream::snapshot(char *out, size_t maxLen) {
+    size_t wp = writePos.load();
+    size_t cp = clearPos.load();
+    // Oldest data still in the ring buffer
+    size_t oldest = (wp > BUFFER_SIZE) ? wp - BUFFER_SIZE : 0;
+    // Effective start is the later of oldest data or clear position
+    size_t start = (cp > oldest) ? cp : oldest;
+    size_t avail = wp - start;
+    if (avail == 0)
+        return 0;
+    if (avail > maxLen)
+        avail = maxLen;
+    // Read from the most recent `avail` bytes
+    size_t offset = wp - avail;
+    for (size_t i = 0; i < avail; i++) {
+        out[i] = ringBuffer[(offset + i) % BUFFER_SIZE];
     }
-    size_t avail = wp - readPos;
+    return avail;
+}
+
+size_t WebLogStream::contentSince(size_t &fromPos, char *out, size_t maxLen) {
+    size_t wp = writePos.load();
+    size_t cp = clearPos.load();
+    // If fromPos is before clear point, jump forward
+    if (fromPos < cp) {
+        fromPos = cp;
+    }
+    // If reader fell behind by more than buffer size, skip ahead
+    size_t oldest = (wp > BUFFER_SIZE) ? wp - BUFFER_SIZE : 0;
+    if (fromPos < oldest) {
+        fromPos = oldest;
+    }
+    size_t avail = wp - fromPos;
     if (avail == 0)
         return 0;
     if (avail > maxLen)
         avail = maxLen;
     for (size_t i = 0; i < avail; i++) {
-        out[i] = ringBuffer[(readPos + i) % BUFFER_SIZE];
+        out[i] = ringBuffer[(fromPos + i) % BUFFER_SIZE];
     }
-    readPos += avail;
+    fromPos += avail;
     return avail;
+}
+
+void WebLogStream::clear() {
+    clearPos.store(writePos.load());
 }
 
 // --- FileLogStream ---
@@ -62,9 +92,13 @@ bool FileLogStream::begin(FS &fs, const char *logPath, const char *oldPath, size
 
 size_t FileLogStream::write(uint8_t c) {
     if (!_ready) return 1;
+    // Flush before writing if buffer is full (prevents out-of-bounds write)
+    if (_bufferPos >= WRITE_BUFFER_SIZE) {
+        flushBuffer();
+    }
     _buffer[_bufferPos++] = c;
-    // Flush when buffer is full or on newline (ensures every log line is persisted)
-    if (_bufferPos >= WRITE_BUFFER_SIZE || c == '\n') {
+    // Also flush on newline to ensure every log line is persisted promptly
+    if (c == '\n') {
         flushBuffer();
     }
     return 1;
@@ -73,8 +107,11 @@ size_t FileLogStream::write(uint8_t c) {
 size_t FileLogStream::write(const uint8_t *buffer, size_t size) {
     if (!_ready) return size;
     for (size_t i = 0; i < size; i++) {
+        if (_bufferPos >= WRITE_BUFFER_SIZE) {
+            flushBuffer();
+        }
         _buffer[_bufferPos++] = buffer[i];
-        if (_bufferPos >= WRITE_BUFFER_SIZE || buffer[i] == '\n') {
+        if (buffer[i] == '\n') {
             flushBuffer();
         }
     }

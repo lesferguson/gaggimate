@@ -191,6 +191,7 @@ bool ProfileManager::saveProfile(Profile &profile) {
 }
 
 bool ProfileManager::deleteProfile(const String &uuid) {
+    Logger.info(LOG_PROFILE, "Deleting profile %s", uuid.c_str());
     _settings.removeFavoritedProfile(uuid);
     return _fs->remove(profilePath(uuid));
 }

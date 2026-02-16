@@ -247,7 +247,10 @@ void WebUIPlugin::setupServer() {
             request->send(404, "text/plain", "No log file found");
             return;
         }
-        request->send(fs, logPath, "text/plain");
+        const char *filename = old ? "system.old.log" : "system.log";
+        AsyncWebServerResponse *response = request->beginResponse(fs, logPath, "text/plain");
+        response->addHeader("Content-Disposition", String("attachment; filename=\"") + filename + "\"");
+        request->send(response);
     });
     server.onNotFound([](AsyncWebServerRequest *request) { request->send(SPIFFS, "/w/index.html"); });
     server.serveStatic("/", SPIFFS, "/w").setDefaultFile("index.html").setCacheControl("max-age=0");
@@ -375,8 +378,35 @@ void WebUIPlugin::handleWebSocketData(AsyncWebSocket *server, AsyncWebSocketClie
                     handleFlushStart(client->id(), doc);
                 } else if (msgType == "req:logs:subscribe") {
                     logSubscribers.insert(client->id());
+                    // Send buffer snapshot so client sees history (heap-allocated to avoid stack overflow)
+                    {
+                        constexpr size_t CHUNK = 2048;
+                        char *buf = new (std::nothrow) char[CHUNK + 1];
+                        if (buf) {
+                            size_t pos = 0; // start from beginning of visible buffer
+                            size_t cp = webLogStream.getWritePos();
+                            // Rewind pos to start of available data
+                            if (cp > WebLogStream::BUFFER_SIZE) {
+                                pos = cp - WebLogStream::BUFFER_SIZE;
+                            }
+                            size_t len;
+                            while ((len = webLogStream.contentSince(pos, buf, CHUNK)) > 0) {
+                                buf[len] = '\0';
+                                JsonDocument snapDoc;
+                                snapDoc["tp"] = "evt:logs:tail";
+                                snapDoc["content"] = buf;
+                                String snapMsg;
+                                serializeJson(snapDoc, snapMsg);
+                                client->text(snapMsg);
+                            }
+                            delete[] buf;
+                        }
+                    }
                 } else if (msgType == "req:logs:unsubscribe") {
                     logSubscribers.erase(client->id());
+                } else if (msgType == "req:logs:clear") {
+                    webLogStream.clear();
+                    lastBroadcastPos = webLogStream.getWritePos();
                 }
             }
         }
@@ -866,7 +896,7 @@ void WebUIPlugin::broadcastLogTail() {
         return;
 
     char buf[2049];
-    size_t len = webLogStream.drain(buf, sizeof(buf) - 1);
+    size_t len = webLogStream.contentSince(lastBroadcastPos, buf, sizeof(buf) - 1);
     if (len == 0)
         return;
     buf[len] = '\0';

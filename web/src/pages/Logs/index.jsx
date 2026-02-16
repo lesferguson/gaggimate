@@ -12,11 +12,13 @@ function formatBytes(bytes) {
 export function Logs() {
   const apiService = useContext(ApiServiceContext);
   const [logContent, setLogContent] = useState('');
-  const [tailing, setTailing] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [filter, setFilter] = useState('info');
   const [logInfo, setLogInfo] = useState(null);
   const logRef = useRef(null);
   const autoScrollRef = useRef(true);
+  const pausedRef = useRef(false);
+  const pendingRef = useRef('');
 
   const fetchLogInfo = useCallback(() => {
     fetch('/api/logs/info')
@@ -31,12 +33,29 @@ export function Logs() {
     return () => clearInterval(interval);
   }, [fetchLogInfo]);
 
+  // Sync paused state to ref so event handler always sees current value
   useEffect(() => {
-    if (!tailing) return;
-
-    const listenerId = apiService.on('evt:logs:tail', msg => {
+    pausedRef.current = paused;
+    if (!paused && pendingRef.current) {
+      const flushed = pendingRef.current;
+      pendingRef.current = '';
       setLogContent(prev => {
-        const updated = prev + (msg.content || '');
+        const updated = prev + flushed;
+        return updated.length > 100000 ? updated.slice(-100000) : updated;
+      });
+    }
+  }, [paused]);
+
+  // Subscribe on mount, unsubscribe on unmount
+  useEffect(() => {
+    const listenerId = apiService.on('evt:logs:tail', msg => {
+      const content = msg.content || '';
+      if (pausedRef.current) {
+        pendingRef.current += content;
+        return;
+      }
+      setLogContent(prev => {
+        const updated = prev + content;
         return updated.length > 100000 ? updated.slice(-100000) : updated;
       });
       if (autoScrollRef.current && logRef.current) {
@@ -72,7 +91,7 @@ export function Logs() {
       apiService.off('evt:logs:tail', listenerId);
       try { apiService.send({ tp: 'req:logs:unsubscribe' }); } catch (e) { /* noop */ }
     };
-  }, [apiService, tailing]);
+  }, [apiService]);
 
   const handleScroll = useCallback(() => {
     if (!logRef.current) return;
@@ -88,8 +107,8 @@ export function Logs() {
           .filter(line => {
             if (!line.trim()) return false;
             if (filter === 'error') return /\bERROR\b/.test(line);
-            if (filter === 'warning') return /\b(?:ERROR|WARNING)\b/.test(line);
-            if (filter === 'info') return /\b(?:ERROR|WARNING|INFO)\b/.test(line);
+            if (filter === 'warning') return /\b(?:ERROR|WARN)\b/.test(line);
+            if (filter === 'info') return /\b(?:ERROR|WARN|INFO)\b/.test(line);
             return true;
           })
           .join('\n');
@@ -153,10 +172,10 @@ export function Logs() {
       <Card sm={12} title='Live Log Viewer'>
         <div className='flex flex-wrap items-center gap-2'>
           <button
-            className={`btn btn-sm ${tailing ? 'btn-error' : 'btn-primary'}`}
-            onClick={() => setTailing(!tailing)}
+            className={`btn btn-sm ${paused ? 'btn-primary' : 'btn-warning'}`}
+            onClick={() => setPaused(!paused)}
           >
-            {tailing ? 'Stop' : 'Start'} Tail
+            {paused ? 'Resume' : 'Pause'}
           </button>
           <select
             className='select select-bordered select-sm'
@@ -170,15 +189,19 @@ export function Logs() {
           </select>
           <button
             className='btn btn-outline btn-sm'
-            onClick={() => setLogContent('')}
+            onClick={() => {
+              setLogContent('');
+              try { apiService.send({ tp: 'req:logs:clear' }); } catch (e) { /* noop */ }
+            }}
             disabled={!logContent}
           >
             Clear
           </button>
-          {tailing && <span className='badge badge-success badge-sm animate-pulse'>Live</span>}
+          {!paused && <span className='badge badge-success badge-sm animate-pulse'>Live</span>}
+          {paused && <span className='badge badge-warning badge-sm'>Paused</span>}
         </div>
         <p className='text-base-content/50 mt-1 text-xs'>
-          Live stream captures all log levels via WebSocket. Defaults to Info+ — switch to "All" for debug output.
+          Streams recent logs from an 8 KB buffer — includes history since last boot or buffer capacity. Defaults to Info+.
         </p>
         <div
           ref={logRef}
@@ -188,11 +211,7 @@ export function Logs() {
           {filteredContent ? (
             <pre className='whitespace-pre-wrap break-all'>{filteredContent}</pre>
           ) : (
-            <p className='text-base-content/40'>
-              {tailing
-                ? 'Waiting for log output...'
-                : 'Click "Start Tail" to begin streaming logs.'}
-            </p>
+            <p className='text-base-content/40'>Waiting for log output...</p>
           )}
         </div>
       </Card>

@@ -3,6 +3,7 @@
 
 #include <Elog.h>
 #include <FS.h>
+#include <atomic>
 
 enum LogId : uint8_t {
     LOG_CORE = 0,
@@ -24,7 +25,8 @@ enum LogId : uint8_t {
     LOG_ID_COUNT
 };
 
-// Ring buffer stream that captures Elog output for streaming to WebSocket clients
+// Ring buffer stream that captures Elog output for streaming to WebSocket clients.
+// All reads are non-consuming — multiple readers see the same content.
 class WebLogStream : public Stream {
   public:
     static constexpr size_t BUFFER_SIZE = 8192;
@@ -35,20 +37,28 @@ class WebLogStream : public Stream {
     int read() override { return -1; }
     int peek() override { return -1; }
 
-    // Returns new content since last drain (up to maxLen). Caller provides buffer.
-    size_t drain(char *out, size_t maxLen);
+    // Read all buffer content since last clear (up to maxLen). Non-consuming.
+    size_t snapshot(char *out, size_t maxLen);
+
+    // Read content written since fromPos (up to maxLen). Updates fromPos for next call.
+    size_t contentSince(size_t &fromPos, char *out, size_t maxLen);
+
+    // Current write position — use to initialize a reader's tracking position.
+    size_t getWritePos() const { return writePos.load(); }
+
+    // Mark the buffer as cleared. Future snapshot/contentSince calls only return content after this point.
+    void clear();
 
   private:
     char ringBuffer[BUFFER_SIZE]{};
-    volatile size_t writePos = 0;
-    size_t readPos = 0;
+    std::atomic<size_t> writePos{0};
+    std::atomic<size_t> clearPos{0};
 };
 
 // Buffered file stream that writes Elog output to SD_MMC or SPIFFS
 class FileLogStream : public Stream {
   public:
     static constexpr size_t WRITE_BUFFER_SIZE = 2048;
-    static constexpr size_t FLUSH_THRESHOLD = 512;
 
     bool begin(FS &fs, const char *logPath, const char *oldPath, size_t maxFileSize);
 

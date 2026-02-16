@@ -255,6 +255,9 @@ void BLEScalePlugin::establishConnection() {
             }
 
             scale->setLogCallback([](std::string message) {
+                while (!message.empty() && (message.back() == '\n' || message.back() == '\r')) {
+                    message.pop_back();
+                }
                 if (!message.empty()) {
                     Logger.debug(LOG_BLE_SCALE, "[scale] %s", message.c_str());
                 }

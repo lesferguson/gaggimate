@@ -78,6 +78,7 @@ class WebUIPlugin : public Plugin {
     // Log streaming state
     std::set<uint32_t> logSubscribers;
     unsigned long lastLogTail = 0;
+    size_t lastBroadcastPos = 0;
 };
 
 #endif // WEBUIPLUGIN_H

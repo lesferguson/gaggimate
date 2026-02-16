@@ -30,6 +30,17 @@
 #endif
 #include <display/core/Log.h>
 
+static const char *modeName(int m) {
+    switch (m) {
+    case MODE_STANDBY: return "Standby";
+    case MODE_BREW: return "Brew";
+    case MODE_STEAM: return "Steam";
+    case MODE_WATER: return "Water";
+    case MODE_GRIND: return "Grind";
+    default: return "Unknown";
+    }
+}
+
 void Controller::setup() {
     mode = settings.getStartupMode();
 
@@ -263,6 +274,7 @@ void Controller::loop() {
     if (clientController.isReadyForConnection()) {
         clientController.connectToServer();
         setupInfos();
+        Logger.info(LOG_CORE, "Bluetooth connected to espresso machine");
         pluginManager->trigger("controller:bluetooth:connect");
         if (!loaded) {
             loaded = true;
@@ -320,12 +332,16 @@ void Controller::loop() {
             if (lastProcess->getType() == MODE_BREW) {
                 if (auto *brewProcess = static_cast<BrewProcess *>(lastProcess);
                     brewProcess->target == ProcessTarget::VOLUMETRIC) {
-                    settings.setBrewDelay(brewProcess->getNewDelayTime());
+                    double newDelay = brewProcess->getNewDelayTime();
+                    Logger.info(LOG_CORE, "Auto-delay adjusted brew: %.0fms -> %.0fms", settings.getBrewDelay(), newDelay);
+                    settings.setBrewDelay(newDelay);
                 }
             } else if (lastProcess->getType() == MODE_GRIND) {
                 if (auto *grindProcess = static_cast<GrindProcess *>(lastProcess);
                     grindProcess->target == ProcessTarget::VOLUMETRIC) {
-                    settings.setGrindDelay(grindProcess->getNewDelayTime());
+                    double newDelay = grindProcess->getNewDelayTime();
+                    Logger.info(LOG_CORE, "Auto-delay adjusted grind: %.0fms -> %.0fms", settings.getGrindDelay(), newDelay);
+                    settings.setGrindDelay(newDelay);
                 }
             }
         }
@@ -334,8 +350,10 @@ void Controller::loop() {
 
     if (grindActiveUntil != 0 && now > grindActiveUntil)
         deactivateGrind();
-    if (mode != MODE_STANDBY && now > lastAction + settings.getStandbyTimeout())
+    if (mode != MODE_STANDBY && now > lastAction + settings.getStandbyTimeout()) {
+        Logger.info(LOG_CORE, "Standby timeout reached (%ds), entering standby", settings.getStandbyTimeout() / 1000);
         activateStandby();
+    }
 }
 
 void Controller::loopControl() {
@@ -378,7 +396,7 @@ void Controller::startProcess(Process *process) {
     }
     processCompleted = false;
     this->currentProcess = process;
-    Logger.info(LOG_CORE, "Process started (type=%d)", process->getType());
+    Logger.info(LOG_CORE, "%s process started", modeName(process->getType()));
     pluginManager->trigger("controller:process:start");
     updateLastAction();
 }
@@ -550,7 +568,9 @@ void Controller::updateControl() {
 void Controller::activate() {
     if (isActive())
         return;
-    Logger.info(LOG_CORE, "Activating mode=%d volumetric=%d", mode, isVolumetricAvailable());
+    const char *targetType = (settings.isVolumetricTarget() && isVolumetricAvailable()) ? "volumetric" : "time";
+    Logger.info(LOG_CORE, "Activating %s (profile=%s, target=%s)", modeName(mode),
+                profileManager->getSelectedProfile().label.c_str(), targetType);
     clear();
     clientController.tare();
     if (isVolumetricAvailable()) {
@@ -589,7 +609,7 @@ void Controller::deactivate() {
     if (currentProcess == nullptr) {
         return;
     }
-    Logger.info(LOG_CORE, "Deactivating process (type=%d)", currentProcess->getType());
+    Logger.info(LOG_CORE, "Deactivating %s process", modeName(currentProcess->getType()));
     delete lastProcess;
     lastProcess = currentProcess;
     currentProcess = nullptr;
@@ -616,7 +636,11 @@ void Controller::activateGrind() {
     pluginManager->trigger("controller:grind:start");
     if (isGrindActive())
         return;
-    Logger.info(LOG_CORE, "Activating grind volumetric=%d", settings.isVolumetricTarget() && isVolumetricAvailable());
+    if (settings.isVolumetricTarget() && isVolumetricAvailable()) {
+        Logger.info(LOG_CORE, "Activating grind (volumetric, target=%.1fg)", settings.getTargetGrindVolume());
+    } else {
+        Logger.info(LOG_CORE, "Activating grind (timed, target=%dms)", settings.getTargetGrindDuration());
+    }
     clear();
     if (settings.isVolumetricTarget() && isVolumetricAvailable()) {
         currentVolumetricSource = VolumetricMeasurementSource::BLUETOOTH;
@@ -649,10 +673,13 @@ bool Controller::isGrindActive() const { return isActive() && currentProcess->ge
 int Controller::getMode() const { return mode; }
 
 void Controller::setMode(int newMode) {
+    int oldMode = mode;
     Event modeEvent = pluginManager->trigger("controller:mode:change", "value", newMode);
     mode = modeEvent.getInt("value");
     steamReady = false;
-
+    if (oldMode != mode) {
+        Logger.info(LOG_CORE, "Mode changed: %s -> %s", modeName(oldMode), modeName(mode));
+    }
     updateLastAction();
     setTargetTemp(getTargetTemp());
 }
@@ -666,6 +693,7 @@ void Controller::onTempRead(float temperature) {
 void Controller::updateLastAction() { lastAction = millis(); }
 
 void Controller::onOTAUpdate() {
+    Logger.info(LOG_OTA, "OTA update initiated, entering standby");
     activateStandby();
     updating = true;
 }
