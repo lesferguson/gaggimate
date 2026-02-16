@@ -9,11 +9,31 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const LOG_SOURCES = [
+  { tag: 'CTL', label: 'Core' },
+  { tag: 'WEB', label: 'WebUI' },
+  { tag: 'BLE', label: 'BLE Scale' },
+  { tag: 'MQT', label: 'MQTT' },
+  { tag: 'OTA', label: 'OTA' },
+  { tag: 'SHT', label: 'Shot History' },
+  { tag: 'PRF', label: 'Profiles' },
+  { tag: 'SET', label: 'Settings' },
+  { tag: 'DRV', label: 'Driver' },
+  { tag: 'PLG', label: 'Plugins' },
+  { tag: 'GND', label: 'Grind' },
+  { tag: 'HMK', label: 'HomeKit' },
+  { tag: 'BFL', label: 'Boiler Fill' },
+  { tag: 'DNS', label: 'mDNS' },
+  { tag: 'WKP', label: 'Wakeup' },
+  { tag: 'LED', label: 'LED' },
+];
+
 export function Logs() {
   const apiService = useContext(ApiServiceContext);
   const [logContent, setLogContent] = useState('');
   const [paused, setPaused] = useState(false);
   const [filter, setFilter] = useState('info');
+  const [source, setSource] = useState('all');
   const [logInfo, setLogInfo] = useState(null);
   const logRef = useRef(null);
   const autoScrollRef = useRef(true);
@@ -100,12 +120,13 @@ export function Logs() {
   }, []);
 
   const filteredContent =
-    filter === 'all'
+    filter === 'all' && source === 'all'
       ? logContent
       : logContent
           .split('\n')
           .filter(line => {
             if (!line.trim()) return false;
+            if (source !== 'all' && !line.includes(`[${source}]`)) return false;
             if (filter === 'error') return /\bERROR\b/.test(line);
             if (filter === 'warning') return /\b(?:ERROR|WARN)\b/.test(line);
             if (filter === 'info') return /\b(?:ERROR|WARN|INFO)\b/.test(line);
@@ -186,6 +207,16 @@ export function Logs() {
             <option value='info'>Info+</option>
             <option value='warning'>Warning+</option>
             <option value='error'>Errors Only</option>
+          </select>
+          <select
+            className='select select-bordered select-sm'
+            value={source}
+            onChange={e => setSource(e.target.value)}
+          >
+            <option value='all'>All Sources</option>
+            {LOG_SOURCES.map(s => (
+              <option key={s.tag} value={s.tag}>{s.label}</option>
+            ))}
           </select>
           <button
             className='btn btn-outline btn-sm'

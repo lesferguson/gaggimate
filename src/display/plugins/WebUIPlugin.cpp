@@ -170,7 +170,7 @@ void WebUIPlugin::loop() {
         lastHeapLog = now;
         uint32_t freeHeap = esp_get_free_heap_size();
         uint32_t minFreeHeap = esp_get_minimum_free_heap_size();
-        Logger.info(LOG_WEBUI, "Health: heap=%u min=%u WS_clients=%u", freeHeap, minFreeHeap, ws.getClients().size());
+        Logger.debug(LOG_WEBUI, "Health: heap=%u min=%u WS_clients=%u", freeHeap, minFreeHeap, ws.getClients().size());
         if (freeHeap < HEAP_WARNING_THRESHOLD) {
             Logger.warning(LOG_WEBUI, "Low heap warning: %u bytes free (min ever: %u)", freeHeap, minFreeHeap);
         }
