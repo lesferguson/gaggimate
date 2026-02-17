@@ -127,9 +127,6 @@ export function Settings() {
       if (key === 'autowakeupEnabled') {
         value = !formData.autowakeupEnabled;
       }
-      if (key === 'syslogEnabled') {
-        value = !formData.syslogEnabled;
-      }
       if (key === 'standbyDisplayEnabled') {
         value = !formData.standbyDisplayEnabled;
         // Set standby brightness to 0 when toggle is off

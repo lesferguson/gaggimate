@@ -117,9 +117,6 @@ class Settings {
     int getAltRelayFunction() const { return altRelayFunction; }
     bool isAutoWakeupEnabled() const { return autowakeupEnabled; }
     std::vector<AutoWakeupSchedule> getAutoWakeupSchedules() const { return autowakeupSchedules; }
-    bool isSyslogEnabled() const { return syslogEnabled; }
-    String getSyslogHost() const { return syslogHost; }
-    int getSyslogPort() const { return syslogPort; }
     void setTargetBrewTemp(int target_brew_temp);
     void setTargetSteamTemp(int target_steam_temp);
     void setTargetWaterTemp(int target_water_temp);
@@ -185,10 +182,6 @@ class Settings {
     void setAltRelayFunction(int alt_relay_function);
     void setAutoWakeupEnabled(bool enabled);
     void setAutoWakeupSchedules(const std::vector<AutoWakeupSchedule> &schedules);
-    void setSyslogEnabled(bool enabled);
-    void setSyslogHost(const String &host);
-    void setSyslogPort(int port);
-
   private:
     Preferences preferences;
     bool dirty = false;
@@ -263,11 +256,6 @@ class Settings {
     int emptyTankDistance = 200;
     int fullTankDistance = 50;
     int altRelayFunction = ALT_RELAY_GRIND; // Default to grind
-
-    // Syslog settings
-    bool syslogEnabled = false;
-    String syslogHost = "";
-    int syslogPort = 514;
 
     void doSave();
     xTaskHandle taskHandle;

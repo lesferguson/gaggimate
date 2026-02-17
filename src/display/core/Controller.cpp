@@ -21,7 +21,6 @@
 #include <display/plugins/ShotHistoryPlugin.h>
 #include <display/plugins/SmartGrindPlugin.h>
 #include <display/plugins/WebUIPlugin.h>
-#include <display/plugins/SyslogPlugin.h>
 #include <display/plugins/mDNSPlugin.h>
 #ifndef GAGGIMATE_HEADLESS
 #include <display/drivers/AmoledDisplayDriver.h>
@@ -90,7 +89,6 @@ void Controller::setup() {
     pluginManager->registerPlugin(&BLEScales);
     pluginManager->registerPlugin(new LedControlPlugin());
     pluginManager->registerPlugin(new AutoWakeupPlugin());
-    pluginManager->registerPlugin(new SyslogPlugin());
     pluginManager->setup(this);
 
     pluginManager->on("profiles:profile:save", [this](Event const &event) {

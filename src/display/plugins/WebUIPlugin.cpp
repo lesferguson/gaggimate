@@ -658,11 +658,6 @@ void WebUIPlugin::handleSettings(AsyncWebServerRequest *request) const {
                 }
                 settings->setAutoWakeupSchedules(schedules);
             }
-            settings->setSyslogEnabled(request->hasArg("syslogEnabled"));
-            if (request->hasArg("syslogHost"))
-                settings->setSyslogHost(request->arg("syslogHost"));
-            if (request->hasArg("syslogPort"))
-                settings->setSyslogPort(request->arg("syslogPort").toInt());
             settings->save(true);
         });
         pluginManager->trigger("settings:changed");
@@ -734,9 +729,6 @@ void WebUIPlugin::handleSettings(AsyncWebServerRequest *request) const {
         }
     }
     doc["autowakeupSchedules"] = schedulesStr;
-    doc["syslogEnabled"] = settings.isSyslogEnabled();
-    doc["syslogHost"] = settings.getSyslogHost();
-    doc["syslogPort"] = settings.getSyslogPort();
     serializeJson(doc, *response);
     request->send(response);
 

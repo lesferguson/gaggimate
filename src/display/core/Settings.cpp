@@ -113,11 +113,6 @@ Settings::Settings() {
     fullTankDistance = preferences.getInt("sr_fd", 50);
     altRelayFunction = preferences.getInt("alt_relay", ALT_RELAY_GRIND);
 
-    // Syslog settings
-    syslogEnabled = preferences.getBool("sl_en", false);
-    syslogHost = preferences.getString("sl_h", "");
-    syslogPort = preferences.getInt("sl_p", 514);
-
     preferences.end();
 
     xTaskCreate(loopTask, "Settings::loop", configMINIMAL_STACK_SIZE * 6, this, 1, &taskHandle);
@@ -466,21 +461,6 @@ void Settings::setAutoWakeupSchedules(const std::vector<AutoWakeupSchedule> &sch
     save();
 }
 
-void Settings::setSyslogEnabled(bool enabled) {
-    syslogEnabled = enabled;
-    save();
-}
-
-void Settings::setSyslogHost(const String &host) {
-    syslogHost = host;
-    save();
-}
-
-void Settings::setSyslogPort(int port) {
-    syslogPort = port;
-    save();
-}
-
 void Settings::doSave() {
     if (!dirty) {
         return;
@@ -569,11 +549,6 @@ void Settings::doSave() {
     preferences.putInt("sr_ed", emptyTankDistance);
     preferences.putInt("sr_fd", fullTankDistance);
     preferences.putInt("alt_relay", altRelayFunction);
-
-    // Syslog settings
-    preferences.putBool("sl_en", syslogEnabled);
-    preferences.putString("sl_h", syslogHost);
-    preferences.putInt("sl_p", syslogPort);
 
     preferences.end();
 }
