@@ -36,9 +36,13 @@ void HomekitAccessory::setState(bool active) const {
     this->state->setVal(active ? 1 : 0, true);
 }
 
-void HomekitAccessory::setCurrentTemperature(float temperatureValue) const { currentTemperature->setVal(temperatureValue, true); }
+void HomekitAccessory::setCurrentTemperature(float temperatureValue) const {
+    currentTemperature->setVal(constrain(temperatureValue, 0.0f, 160.0f), true);
+}
 
-void HomekitAccessory::setTargetTemperature(float temperatureValue) const { targetTemperature->setVal(temperatureValue, true); }
+void HomekitAccessory::setTargetTemperature(float temperatureValue) const {
+    targetTemperature->setVal(constrain(temperatureValue, 0.0f, 160.0f), true);
+}
 
 float HomekitAccessory::getTargetTemperature() const { return targetTemperature->getVal(); }
 
