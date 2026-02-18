@@ -54,6 +54,10 @@ void WebUIPlugin::setup(Controller *_controller, PluginManager *_pluginManager) 
         Logger.warning(LOG_WEBUI, "WiFi disconnected, stopping webserver");
         stop();
     });
+    pluginManager->on("controller:health", [this](Event const &) {
+        Logger.info(LOG_WEBUI, "Status: server=%s WS_clients=%u log_subscribers=%u", serverRunning ? "running" : "stopped",
+                    ws.getClients().size(), logSubscribers.size());
+    });
     pluginManager->on("controller:ready", [this](Event const &) {
         ota->setControllerVersion(controller->getSystemInfo().version);
         ota->init(controller->getClientController()->getClient());
@@ -165,15 +169,6 @@ void WebUIPlugin::loop() {
     if (now > lastDns + DNS_PERIOD && dnsServer != nullptr) {
         lastDns = now;
         dnsServer->processNextRequest();
-    }
-    if (now > lastHeapLog + HEAP_LOG_PERIOD) {
-        lastHeapLog = now;
-        uint32_t freeHeap = esp_get_free_heap_size();
-        uint32_t minFreeHeap = esp_get_minimum_free_heap_size();
-        Logger.debug(LOG_WEBUI, "Health: heap=%u min=%u WS_clients=%u", freeHeap, minFreeHeap, ws.getClients().size());
-        if (freeHeap < HEAP_WARNING_THRESHOLD) {
-            Logger.warning(LOG_WEBUI, "Low heap warning: %u bytes free (min ever: %u)", freeHeap, minFreeHeap);
-        }
     }
     if (!logSubscribers.empty() && now > lastLogTail + 1000) {
         lastLogTail = now;
@@ -398,6 +393,9 @@ void WebUIPlugin::handleWebSocketData(AsyncWebSocket *server, AsyncWebSocketClie
                 } else if (msgType == "req:flush:start") {
                     handleFlushStart(client->id(), doc);
                 } else if (msgType == "req:logs:subscribe") {
+                    if (logSubscribers.empty()) {
+                        lastBroadcastPos = webLogStream.getWritePos();
+                    }
                     logSubscribers.insert(client->id());
                     // Send buffer snapshot so client sees history (heap-allocated to avoid stack overflow)
                     {

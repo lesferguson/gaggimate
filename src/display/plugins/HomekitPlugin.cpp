@@ -1,6 +1,7 @@
 #include "HomekitPlugin.h"
 #include "../core/Controller.h"
 #include "../core/constants.h"
+#include <display/core/Log.h>
 #include <utility>
 
 HomekitAccessory::HomekitAccessory(change_callback_t callback)
@@ -36,9 +37,13 @@ void HomekitAccessory::setState(bool active) const {
     this->state->setVal(active ? 1 : 0, true);
 }
 
-void HomekitAccessory::setCurrentTemperature(float temperatureValue) const { currentTemperature->setVal(temperatureValue, true); }
+void HomekitAccessory::setCurrentTemperature(float temperatureValue) const {
+    currentTemperature->setVal(constrain(temperatureValue, 0.0f, 160.0f), true);
+}
 
-void HomekitAccessory::setTargetTemperature(float temperatureValue) const { targetTemperature->setVal(temperatureValue, true); }
+void HomekitAccessory::setTargetTemperature(float temperatureValue) const {
+    targetTemperature->setVal(constrain(temperatureValue, 0.0f, 160.0f), true);
+}
 
 float HomekitAccessory::getTargetTemperature() const { return targetTemperature->getVal(); }
 
@@ -55,6 +60,9 @@ void HomekitPlugin::clearAction() { actionRequired = false; }
 void HomekitPlugin::setup(Controller *controller, PluginManager *pluginManager) {
     this->controller = controller;
 
+    pluginManager->on("controller:health", [this](Event const &) {
+        Logger.info(LOG_HOMEKIT, "Status: initialized=%s temp=%.1f", accessory != nullptr ? "yes" : "no", lastTemp);
+    });
     pluginManager->on("controller:wifi:connect", [this](Event &event) {
         int apMode = event.getInt("AP");
         if (apMode)
@@ -79,7 +87,8 @@ void HomekitPlugin::setup(Controller *controller, PluginManager *pluginManager) 
     pluginManager->on("boiler:currentTemperature:change", [this](Event const &event) {
         if (accessory == nullptr)
             return;
-        accessory->setCurrentTemperature(event.getFloat("value"));
+        lastTemp = event.getFloat("value");
+        accessory->setCurrentTemperature(lastTemp);
     });
 
     pluginManager->on("controller:mode:change", [this](Event const &event) {

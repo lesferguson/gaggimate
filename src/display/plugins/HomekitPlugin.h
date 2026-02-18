@@ -44,6 +44,7 @@ class HomekitPlugin : public Plugin {
     HomekitAccessory *accessory;
     bool actionRequired = false;
     Controller *controller;
+    float lastTemp = 0;
 };
 
 #endif // HOMEKITPLUGIN_H

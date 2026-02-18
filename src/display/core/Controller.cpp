@@ -61,6 +61,9 @@ void Controller::setup() {
     }
 #endif
     initLogging(sdcard);
+    // Apply saved timezone early so log timestamps are correct before NTP syncs
+    setenv("TZ", resolve_timezone(settings.getTimezone()), 1);
+    tzset();
     if (sdcard) {
         Logger.info(LOG_CORE, "SD Card detected and mounted");
         Logger.info(LOG_CORE, "Used: %lluMB, Capacity: %lluMB", SD_MMC.usedBytes() / 1024 / 1024, SD_MMC.cardSize() / 1024 / 1024);
@@ -356,6 +359,17 @@ void Controller::loop() {
             }
         }
         lastProgress = now;
+    }
+
+    // Periodic service health status (every 5 minutes)
+    if (now - lastHealthLog > 5 * 60 * 1000) {
+        lastHealthLog = now;
+        bool wifiConn = WiFi.status() == WL_CONNECTED;
+        Logger.info(LOG_CORE, "Status: WiFi=%s BLE=%s Scale=%s SD=%s Heap=%u/%u Mode=%s",
+                    wifiConn ? WiFi.localIP().toString().c_str() : (isApConnection ? "AP" : "off"),
+                    clientController.isConnected() ? "ok" : "down", BLEScales.isConnected() ? "ok" : "off",
+                    sdcard ? "ok" : "no", esp_get_free_heap_size(), esp_get_minimum_free_heap_size(), modeName(mode));
+        pluginManager->trigger("controller:health");
     }
 
     if (grindActiveUntil != 0 && now > grindActiveUntil)

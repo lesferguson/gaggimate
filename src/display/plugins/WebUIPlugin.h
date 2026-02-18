@@ -15,9 +15,6 @@ constexpr size_t UPDATE_CHECK_INTERVAL = 5 * 60 * 1000;
 constexpr size_t CLEANUP_PERIOD = 5 * 1000;
 constexpr size_t STATUS_PERIOD = 500;
 constexpr size_t DNS_PERIOD = 10;
-constexpr size_t HEAP_LOG_PERIOD = 60 * 1000;
-constexpr size_t HEAP_WARNING_THRESHOLD = 20 * 1024;
-
 const String LOCAL_URL = "http://4.4.4.1/";
 const String RELEASE_URL = "https://github.com/jniebuhr/gaggimate/releases/";
 
@@ -71,7 +68,6 @@ class WebUIPlugin : public Plugin {
     long lastStatus = 0;
     long lastCleanup = 0;
     long lastDns = 0;
-    unsigned long lastHeapLog = 0;
     bool updating = false;
     bool apMode = false;
     bool serverRunning = false;

@@ -127,6 +127,9 @@ void MQTTPlugin::publishBrewState(const char *state) {
 }
 
 void MQTTPlugin::setup(Controller *controller, PluginManager *pluginManager) {
+    pluginManager->on("controller:health", [this](Event const &) {
+        Logger.info(LOG_MQTT, "Status: connected=%s", client.connected() ? "yes" : "no");
+    });
     pluginManager->on("controller:wifi:connect", [this, controller](const Event &) {
         if (!connect(controller))
             return;
