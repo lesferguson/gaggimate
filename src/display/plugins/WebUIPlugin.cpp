@@ -57,6 +57,10 @@ void WebUIPlugin::setup(Controller *_controller, PluginManager *_pluginManager) 
     pluginManager->on("controller:health", [this](Event const &) {
         Logger.info(LOG_WEBUI, "Status: server=%s WS_clients=%u log_subscribers=%u", serverRunning ? "running" : "stopped",
                     ws.getClients().size(), logSubscribers.size());
+        for (auto &c : ws.getClients()) {
+            Logger.debug(LOG_WEBUI, "  client #%u ip=%s queue=%u can_send=%s", c.id(),
+                         c.remoteIP().toString().c_str(), c.queueLen(), c.canSend() ? "yes" : "no");
+        }
     });
     pluginManager->on("controller:ready", [this](Event const &) {
         ota->setControllerVersion(controller->getSystemInfo().version);
@@ -223,36 +227,58 @@ void WebUIPlugin::setupServer() {
     server.on("/api/logs/info", HTTP_GET, [this](AsyncWebServerRequest *request) {
         JsonDocument doc;
         bool hasSD = controller->isSDCard();
-        FS &fs = hasSD ? (FS &)SD_MMC : (FS &)SPIFFS;
-        const char *logPath = hasSD ? "/logs/system.log" : "/system.log";
-        const char *oldPath = hasSD ? "/logs/system.old" : "/system.old";
-        doc["storage"] = hasSD ? "sd" : "spiffs";
-        doc["path"] = logPath;
-        if (fs.exists(logPath)) {
-            File f = fs.open(logPath, FILE_READ);
-            doc["size"] = f ? (int)f.size() : 0;
+        doc["active"] = hasSD ? "sd" : "spiffs";
+        // Report SD card logs
+        JsonDocument sd;
+        sd["path"] = "/logs/system.log";
+        if (hasSD && SD_MMC.exists("/logs/system.log")) {
+            File f = SD_MMC.open("/logs/system.log", FILE_READ);
+            sd["size"] = f ? (int)f.size() : 0;
             if (f) f.close();
         } else {
-            doc["size"] = 0;
+            sd["size"] = 0;
         }
-        if (fs.exists(oldPath)) {
-            File f = fs.open(oldPath, FILE_READ);
-            doc["oldSize"] = f ? (int)f.size() : 0;
+        if (hasSD && SD_MMC.exists("/logs/system.old")) {
+            File f = SD_MMC.open("/logs/system.old", FILE_READ);
+            sd["oldSize"] = f ? (int)f.size() : 0;
             if (f) f.close();
         } else {
-            doc["oldSize"] = 0;
+            sd["oldSize"] = 0;
         }
+        sd["available"] = hasSD;
+        doc["sd"] = sd;
+        // Report SPIFFS logs
+        JsonDocument spiffs;
+        spiffs["path"] = "/system.log";
+        if (SPIFFS.exists("/system.log")) {
+            File f = SPIFFS.open("/system.log", FILE_READ);
+            spiffs["size"] = f ? (int)f.size() : 0;
+            if (f) f.close();
+        } else {
+            spiffs["size"] = 0;
+        }
+        if (SPIFFS.exists("/system.old")) {
+            File f = SPIFFS.open("/system.old", FILE_READ);
+            spiffs["oldSize"] = f ? (int)f.size() : 0;
+            if (f) f.close();
+        } else {
+            spiffs["oldSize"] = 0;
+        }
+        spiffs["available"] = true;
+        doc["spiffs"] = spiffs;
         String json;
         serializeJson(doc, json);
         request->send(200, "application/json", json);
     });
     server.on("/api/logs/download", HTTP_GET, [this](AsyncWebServerRequest *request) {
         bool hasSD = controller->isSDCard();
-        FS &fs = hasSD ? (FS &)SD_MMC : (FS &)SPIFFS;
-        const char *logPath = hasSD ? "/logs/system.log" : "/system.log";
+        bool useSpiffs = request->hasParam("storage") && request->getParam("storage")->value() == "spiffs";
+        bool useSD = !useSpiffs && hasSD;
+        FS &fs = useSD ? (FS &)SD_MMC : (FS &)SPIFFS;
+        const char *logPath = useSD ? "/logs/system.log" : "/system.log";
         bool old = request->hasParam("old");
         if (old) {
-            logPath = hasSD ? "/logs/system.old" : "/system.old";
+            logPath = useSD ? "/logs/system.old" : "/system.old";
         }
         if (!fs.exists(logPath)) {
             request->send(404, "text/plain", "No log file found");
@@ -263,19 +289,43 @@ void WebUIPlugin::setupServer() {
         response->addHeader("Content-Disposition", String("attachment; filename=\"") + filename + "\"");
         request->send(response);
     });
+    server.on("/api/logs/delete", HTTP_DELETE, [this](AsyncWebServerRequest *request) {
+        if (!request->hasParam("storage")) {
+            request->send(400, "application/json", "{\"error\":\"missing storage param\"}");
+            return;
+        }
+        String storage = request->getParam("storage")->value();
+        bool deleted = false;
+        if (storage == "sd" && controller->isSDCard()) {
+            if (SD_MMC.exists("/logs/system.log")) { SD_MMC.remove("/logs/system.log"); deleted = true; }
+            if (SD_MMC.exists("/logs/system.old")) { SD_MMC.remove("/logs/system.old"); deleted = true; }
+        } else if (storage == "spiffs") {
+            if (SPIFFS.exists("/system.log")) { SPIFFS.remove("/system.log"); deleted = true; }
+            if (SPIFFS.exists("/system.old")) { SPIFFS.remove("/system.old"); deleted = true; }
+        }
+        if (deleted) {
+            Logger.info(LOG_WEBUI, "Log files deleted from %s", storage.c_str());
+            request->send(200, "application/json", "{\"deleted\":true}");
+        } else {
+            request->send(404, "application/json", "{\"deleted\":false,\"error\":\"no log files found\"}");
+        }
+    });
     server.onNotFound([](AsyncWebServerRequest *request) { request->send(SPIFFS, "/w/index.html"); });
     server.serveStatic("/", SPIFFS, "/w").setDefaultFile("index.html").setCacheControl("max-age=0");
     ws.onEvent(
         [this](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
             if (type == WS_EVT_CONNECT) {
                 client->setCloseClientOnQueueFull(true);
-                Logger.info(LOG_WEBUI, "WebSocket client connected (%d open connections)", server->getClients().size());
+                Logger.info(LOG_WEBUI, "WS client #%u connected from %s:%u (%u open)", client->id(),
+                            client->remoteIP().toString().c_str(), client->remotePort(), server->getClients().size());
             } else if (type == WS_EVT_DISCONNECT) {
-                Logger.info(LOG_WEBUI, "WebSocket client disconnected (%d open connections)", server->getClients().size());
+                Logger.info(LOG_WEBUI, "WS client #%u disconnected from %s (%u open)", client->id(),
+                            client->remoteIP().toString().c_str(), server->getClients().size());
                 rxBuffers.erase(client->id());
                 logSubscribers.erase(client->id());
             } else if (type == WS_EVT_ERROR) {
-                Logger.error(LOG_WEBUI, "WebSocket error on client %u: %u", client->id(), *((uint16_t *)arg));
+                Logger.error(LOG_WEBUI, "WS error on client #%u (%s): %u", client->id(),
+                             client->remoteIP().toString().c_str(), *((uint16_t *)arg));
             } else if (type == WS_EVT_DATA) {
                 handleWebSocketData(server, client, type, arg, data, len);
             }
