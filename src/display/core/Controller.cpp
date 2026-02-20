@@ -715,6 +715,8 @@ void Controller::setMode(int newMode) {
 
 void Controller::onTempRead(float temperature) {
     float temp = temperature - static_cast<float>(settings.getTemperatureOffset());
+    // Clamp to valid range - thermocouples can report negative temps when cold or out of range values
+    temp = constrain(temp, static_cast<float>(MIN_TEMP), static_cast<float>(MAX_TEMP));
     Event event = pluginManager->trigger("boiler:currentTemperature:change", "value", temp);
     currentTemp = event.getFloat("value");
 }
