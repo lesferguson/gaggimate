@@ -28,86 +28,90 @@ const LOG_SOURCES = [
   { tag: 'LED', label: 'LED' },
 ];
 
-function StorageCard({ label, storage, info, isActive, onDelete }) {
-  const [confirming, setConfirming] = useState(false);
-  const hasFiles = info.size > 0 || info.oldSize > 0;
+function LogFileRow({ label, storage, size, isOld }) {
+  if (size === 0) return null;
+  return (
+    <div className='flex items-center gap-2'>
+      <span className='text-sm'>{label}: {formatBytes(size)}</span>
+      <a
+        href={`/api/logs/download?storage=${storage}${isOld ? '&old' : ''}`}
+        target='_blank'
+        rel='noopener'
+        className='btn btn-outline btn-xs'
+      >
+        Download
+      </a>
+    </div>
+  );
+}
 
-  if (!info.available && !hasFiles) return null;
+function DeleteButton({ label, storage, onDelete }) {
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <button className='btn btn-error btn-outline btn-xs' onClick={() => setConfirming(true)}>
+        Delete {label} Logs
+      </button>
+    );
+  }
+  return (
+    <div className='flex items-center gap-2'>
+      <span className='text-warning text-sm'>Delete all {label} logs?</span>
+      <button className='btn btn-error btn-xs' onClick={() => { setConfirming(false); onDelete(storage); }}>
+        Confirm
+      </button>
+      <button className='btn btn-ghost btn-xs' onClick={() => setConfirming(false)}>Cancel</button>
+    </div>
+  );
+}
+
+function LogFilesContent({ logInfo, onDelete }) {
+  const activeStorage = logInfo.active;
+  const activeKey = activeStorage === 'sd' ? 'sd' : 'spiffs';
+  const inactiveKey = activeStorage === 'sd' ? 'spiffs' : 'sd';
+  const activeInfo = logInfo[activeKey];
+  const inactiveInfo = logInfo[inactiveKey];
+  const activeLabel = activeKey === 'sd' ? 'SD Card' : 'SPIFFS';
+  const inactiveLabel = inactiveKey === 'sd' ? 'SD Card' : 'SPIFFS';
+  const hasActiveFiles = activeInfo && (activeInfo.size > 0 || activeInfo.oldSize > 0);
+  const hasInactiveFiles = inactiveInfo && (inactiveInfo.size > 0 || inactiveInfo.oldSize > 0);
 
   return (
-    <Card sm={12} title={`${label} Logs`}>
-      <div className='flex flex-col gap-3'>
-        <div className='text-base-content/70 flex items-center gap-2 text-sm'>
-          {isActive && <span className='badge badge-success badge-sm'>Active</span>}
-          {!info.available && <span className='badge badge-warning badge-sm'>Unavailable</span>}
-          <span>
-            Path: <code className='text-xs'>{info.path}</code>
-          </span>
-          {isActive && (
-            <span>
-              {storage === 'sd'
-                ? '(INFO+ level, 500 KB max with rotation)'
-                : '(WARNING+ level, 50 KB max)'}
-            </span>
-          )}
-        </div>
-        {hasFiles ? (
-          <div className='flex flex-wrap items-center gap-2'>
-            <div className='flex items-center gap-2'>
-              <span className='text-sm font-medium'>Current:</span>
-              <span className='text-base-content/70 text-sm'>{formatBytes(info.size)}</span>
-              <a
-                href={`/api/logs/download?storage=${storage}`}
-                target='_blank'
-                rel='noopener'
-                className={`btn btn-primary btn-sm ${info.size === 0 ? 'btn-disabled' : ''}`}
-              >
-                Download
-              </a>
-            </div>
-            {info.oldSize > 0 && (
-              <div className='flex items-center gap-2'>
-                <span className='text-sm font-medium'>Previous:</span>
-                <span className='text-base-content/70 text-sm'>{formatBytes(info.oldSize)}</span>
-                <a
-                  href={`/api/logs/download?storage=${storage}&old`}
-                  target='_blank'
-                  rel='noopener'
-                  className='btn btn-outline btn-sm'
-                >
-                  Download
-                </a>
-              </div>
-            )}
-            <div className='flex items-center gap-2'>
-              {!confirming ? (
-                <button className='btn btn-error btn-outline btn-sm' onClick={() => setConfirming(true)}>
-                  Delete
-                </button>
-              ) : (
-                <>
-                  <span className='text-warning text-sm'>Delete all {label} logs?</span>
-                  <button
-                    className='btn btn-error btn-sm'
-                    onClick={() => {
-                      setConfirming(false);
-                      onDelete(storage);
-                    }}
-                  >
-                    Confirm
-                  </button>
-                  <button className='btn btn-ghost btn-sm' onClick={() => setConfirming(false)}>
-                    Cancel
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        ) : (
-          <p className='text-base-content/40 text-sm'>No log files found.</p>
-        )}
+    <div className='flex flex-col gap-3'>
+      <div className='text-base-content/70 text-sm'>
+        Saving to <span className='badge badge-sm'>{activeLabel}</span>{' '}
+        <code className='text-xs'>{activeInfo?.path}</code>{' '}
+        <span className='text-base-content/50'>
+          {activeKey === 'sd'
+            ? '— INFO+ level, 500 KB max with rotation'
+            : '— WARNING+ level, 50 KB max'}
+        </span>
       </div>
-    </Card>
+      {hasActiveFiles ? (
+        <div className='flex flex-wrap items-center gap-2'>
+          <LogFileRow label='Current' storage={activeKey} size={activeInfo.size} />
+          <LogFileRow label='Previous' storage={activeKey} size={activeInfo.oldSize} isOld />
+          <DeleteButton label={activeLabel} storage={activeKey} onDelete={onDelete} />
+        </div>
+      ) : (
+        <p className='text-base-content/40 text-sm'>No log files yet — 0 bytes.</p>
+      )}
+      {hasInactiveFiles ? (
+        <>
+          <div className='divider my-0' />
+          <div className='text-base-content/70 text-sm'>
+            Stale logs on <span className='badge badge-warning badge-sm'>{inactiveLabel}</span>
+          </div>
+          <div className='flex flex-wrap items-center gap-2'>
+            <LogFileRow label='Current' storage={inactiveKey} size={inactiveInfo.size} />
+            <LogFileRow label='Previous' storage={inactiveKey} size={inactiveInfo.oldSize} isOld />
+            <DeleteButton label={inactiveLabel} storage={inactiveKey} onDelete={onDelete} />
+          </div>
+        </>
+      ) : (
+        <p className='text-base-content/50 text-xs'>{inactiveLabel}: no log files.</p>
+      )}
+    </div>
   );
 }
 
@@ -232,36 +236,15 @@ export function Logs() {
         <h2 className='flex-grow text-2xl font-bold sm:text-3xl'>Logs</h2>
       </div>
 
-      {logInfo ? (
-        <>
-          {logInfo.sd && (logInfo.sd.available || logInfo.sd.size > 0 || logInfo.sd.oldSize > 0) && (
-            <div className='mb-4'>
-              <StorageCard
-                label='SD Card'
-                storage='sd'
-                info={logInfo.sd}
-                isActive={logInfo.active === 'sd'}
-                onDelete={handleDelete}
-              />
-            </div>
-          )}
-          {logInfo.spiffs && (logInfo.spiffs.size > 0 || logInfo.spiffs.oldSize > 0 || logInfo.active === 'spiffs') && (
-            <div className='mb-4'>
-              <StorageCard
-                label='SPIFFS'
-                storage='spiffs'
-                info={logInfo.spiffs}
-                isActive={logInfo.active === 'spiffs'}
-                onDelete={handleDelete}
-              />
-            </div>
-          )}
-        </>
-      ) : (
-        <Card sm={12} title='Persistent Log Files'>
+      <Card sm={12} title='Persistent Log Files'>
+        {logInfo ? (
+          <LogFilesContent logInfo={logInfo} onDelete={handleDelete} />
+        ) : (
           <p className='text-base-content/40 text-sm'>Loading log file info...</p>
-        </Card>
-      )}
+        )}
+      </Card>
+
+      <div className='mt-4' />
 
       <Card sm={12} title='Live Log Viewer'>
         <div className='flex flex-wrap items-center gap-2'>

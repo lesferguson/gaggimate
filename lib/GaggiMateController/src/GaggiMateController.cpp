@@ -89,6 +89,7 @@ void GaggiMateController::setup() {
     _ble.registerOutputControlCallback([this](bool valve, float pumpSetpoint, float heaterSetpoint) {
         handlePing();
         if (errorState != ERROR_CODE_NONE) {
+            ESP_LOGW(LOG_TAG, "Ignoring output control (heater=%.1f) due to error state %d", heaterSetpoint, errorState);
             return;
         }
         this->pump->setPower(pumpSetpoint);
@@ -104,6 +105,7 @@ void GaggiMateController::setup() {
         [this](bool valve, float heaterSetpoint, bool pressureTarget, float pressure, float flow) {
             handlePing();
             if (errorState != ERROR_CODE_NONE) {
+                ESP_LOGW(LOG_TAG, "Ignoring advanced output control (heater=%.1f) due to error state %d", heaterSetpoint, errorState);
                 return;
             }
             this->valve->set(valve);
@@ -200,6 +202,7 @@ void GaggiMateController::handlePingTimeout() {
     this->valve->set(false);
     this->alt->set(false);
     errorState = ERROR_CODE_TIMEOUT;
+    _ble.sendError(ERROR_CODE_TIMEOUT);  // Notify display board of timeout error
 }
 
 void GaggiMateController::thermalRunawayShutdown() {
