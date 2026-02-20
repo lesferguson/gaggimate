@@ -365,10 +365,13 @@ void Controller::loop() {
     if (now - lastHealthLog > 5 * 60 * 1000) {
         lastHealthLog = now;
         bool wifiConn = WiFi.status() == WL_CONNECTED;
-        Logger.info(LOG_CORE, "Status: WiFi=%s BLE=%s Scale=%s SD=%s Heap=%u/%u Mode=%s",
+        float targetTemp = getTargetTemp();
+        Logger.info(LOG_CORE,
+                    "Status: WiFi=%s BLE=%s Scale=%s SD=%s Heap=%u/%u Mode=%s Temp=%.1f/%.1f Heater=%s Pressure=%.1fbar Err=%d",
                     wifiConn ? WiFi.localIP().toString().c_str() : (isApConnection ? "AP" : "off"),
                     clientController.isConnected() ? "ok" : "down", BLEScales.isConnected() ? "ok" : "off",
-                    sdcard ? "ok" : "no", esp_get_free_heap_size(), esp_get_minimum_free_heap_size(), modeName(mode));
+                    sdcard ? "ok" : "no", esp_get_free_heap_size(), esp_get_minimum_free_heap_size(), modeName(mode),
+                    currentTemp, targetTemp, targetTemp > 0 ? "on" : "off", pressure, error);
         pluginManager->trigger("controller:health");
     }
 
